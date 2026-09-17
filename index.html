@@ -943,7 +943,7 @@
     if(chunks.length>6){ setStatus('api-status','조회기간이 너무 깁니다('+chunks.length+'구간). 최근 3개월로 줄이면 더 정확합니다. 그래도 '+chunks.length+'구간을 나눠 조회합니다…'); }
     else { setStatus('api-status','불러오는 중… (공고종류 '+(epSel==='auto'?'자동':epName(epSel))+', '+chunks.length+'구간)'); }
     function fetchOne(ep, cb, ce){
-      var base='https://apis.data.go.kr/1230000/BidPublicInfoService02/'+ep;
+      var base='https://apis.data.go.kr/1230000/ad/BidPublicInfoService/'+ep;
       var url=base+'?serviceKey='+encodeURIComponent(key)+'&numOfRows='+rows+'&pageNo=1&type=json&inqryDiv='+encodeURIComponent(div)+'&inqryBgnDt='+ymdhm(cb,false)+'&inqryEndDt='+ymdhm(ce,true);
       if(kw) url+='&bidNtceNm='+encodeURIComponent(kw);
       return fetch(url).then(function(r){ return r.text(); }).then(function(txt){ return {ep:ep, txt:txt}; });
@@ -987,6 +987,18 @@
       acc.forEach(function(res){
         var data=null;
         try{ data=JSON.parse(res.txt); }catch(e){ return; }
+        if(data&&data.OpenAPI_ServiceResponse){
+          try{
+            var e=data.OpenAPI_ServiceResponse.cmmMsgHeader||data.OpenAPI_ServiceResponse.header||{};
+            var em=e.errMsg||e.returnAuthMsg||e.returnReasonCode||'';
+            var am=e.returnAuthMsg||'';
+            if(!__rm) __rm=String(em+(am&&am!==em?(' / '+am):''));
+            if(!__rc) __rc=String(e.returnReasonCode||e.returnCode||'OPENAPI_ERROR');
+            if(!__top) __top='OpenAPI_ServiceResponse';
+            if(!__respk) __respk=keysOf(data.OpenAPI_ServiceResponse);
+          }catch(e2){}
+          return;
+        }
         var topKeys=keysOf(data);
         var resp=(data&&(data.response||data.Response))||data;
         var respKeys=keysOf(resp);
@@ -1025,6 +1037,10 @@
       diag+=' [조회: '+eps.map(epName).join('+')+' x '+chunks.length+'구간]';
       if(!__allItems.length&&firstNonJson){
         setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+String(firstNonJson).slice(0,200)+diag,'err');
+        apiFetch.disabled=false; return;
+      }
+      if(__rc&&(String(__rc).indexOf('OPENAPI')>-1||String(__rm).indexOf('NO_OPENAPI_SERVICE_ERROR')>-1)){
+        setStatus('api-status','호출 주소·활용신청 문제입니다 [NO_OPENAPI_SERVICE_ERROR]. 원인은 둘 중 하나입니다. ① 공공데이터포털에서 신청한 서비스명과 호출 주소가 다름(지금은 ad/BidPublicInfoService + '+eps.map(epName).join('+')+' 로 호출) ② 해당 서비스 활용승인이 아직 안 됨(승인까지 2~3일). [내활용신청]에서 서비스명이 [조달청_나라장터 입찰공고정보서비스(BidPublicInfoService)]인지, 상태가 [승인]인지 확인하세요. 키 재발급 후에는 1~2시간 뒤에 됩니다.'+diag,'err');
         apiFetch.disabled=false; return;
       }
       if(__rc&&!okCode(__rc)){
