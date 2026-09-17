@@ -469,7 +469,7 @@
       <div class="api-row">
         <div class="field"><label for="api-bgn">조회 시작일</label><input type="date" id="api-bgn" value="2026-08-18"></div>
         <div class="field"><label for="api-end">조회 종료일</label><input type="date" id="api-end" value="2026-09-17"></div>
-        <div class="field" style="max-width:150px;"><label for="api-div">조회 기준</label><select id="api-div"><option value="1" selected>공고게시일시</option><option value="2">입찰마감일시</option></select></div>
+        <div class="field" style="max-width:150px;"><label for="api-div">조회 기준</label><select id="api-div"><option value="1" selected>공고게시일시</option><option value="2">개찰일시</option></select></div><div class="field" style="max-width:190px;"><label for="api-ep">공고 종류</label><select id="api-ep"><option value="auto" selected>자동(공사+용역+물품)</option><option value="getBidPblancListInfoCnstwkPPSSrch">공사</option><option value="getBidPblancListInfoServcPPSSrch">용역</option><option value="getBidPblancListInfoThngPPSSrch">물품</option><option value="getBidPblancListInfoFrgcptPPSSrch">외자</option></select></div>
       </div>
       <div class="btn-row">
         <button class="btn-sm primary" id="api-fetch">실제 공고 불러오기</button>
@@ -935,13 +935,40 @@
     var bgn=readDate('api-bgn', new Date(2026,7,18)); var end=readDate('api-end', new Date(2026,8,17));
     if(bgn>end){ setStatus('api-status','조회 시작일이 종료일보다 늦습니다. 날짜를 확인하세요.','err'); apiFetch.disabled=false; return; }
     var div=$('api-div')?$('api-div').value:'1';
-    var base='https://apis.data.go.kr/1230000/BidPublicInfoService02/getBidPblancListInfoServcPPSSrch';
-    var url=base+'?serviceKey='+encodeURIComponent(key)+'&numOfRows='+rows+'&pageNo=1&type=json&inqryDiv='+encodeURIComponent(div)+'&inqryBgnDt='+ymdhm(bgn,false)+'&inqryEndDt='+ymdhm(end,true);
-    if(kw) url+='&bidNtceNm='+encodeURIComponent(kw);
-    fetch(url).then(function(r){ return r.text(); }).then(function(txt){
-      var data=null;
-      try{ data=JSON.parse(txt); }
-      catch(e){ setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+txt.slice(0,200),'err'); apiFetch.disabled=false; return; }
+    var epSel=$('api-ep')?$('api-ep').value:'auto';
+    var eps=(epSel==='auto')?['getBidPblancListInfoCnstwkPPSSrch','getBidPblancListInfoServcPPSSrch','getBidPblancListInfoThngPPSSrch']:[epSel];
+    var epName=function(e){ if(e.indexOf('Cnstwk')>-1) return '공사'; if(e.indexOf('Servc')>-1) return '용역'; if(e.indexOf('Thng')>-1) return '물품'; if(e.indexOf('Frgcpt')>-1) return '외자'; return e; };
+    // 3년 같은 장기 조회는 31일씩 나눠 조회 (한 번에 보내면 빈 응답)
+    var chunks=[]; (function(){ var s=new Date(bgn.getTime()), e=new Date(end.getTime()); while(s<=e){ var ce=new Date(s.getTime()); ce.setDate(ce.getDate()+30); if(ce>e) ce=new Date(e.getTime()); chunks.push([new Date(s.getTime()), new Date(ce.getTime())]); ce.setDate(ce.getDate()+1); s=ce; } })();
+    if(chunks.length>6){ setStatus('api-status','조회기간이 너무 깁니다('+chunks.length+'구간). 최근 3개월로 줄이면 더 정확합니다. 그래도 '+chunks.length+'구간을 나눠 조회합니다…'); }
+    else { setStatus('api-status','불러오는 중… (공고종류 '+(epSel==='auto'?'자동':epName(epSel))+', '+chunks.length+'구간)'); }
+    function fetchOne(ep, cb, ce){
+      var base='https://apis.data.go.kr/1230000/BidPublicInfoService02/'+ep;
+      var url=base+'?serviceKey='+encodeURIComponent(key)+'&numOfRows='+rows+'&pageNo=1&type=json&inqryDiv='+encodeURIComponent(div)+'&inqryBgnDt='+ymdhm(cb,false)+'&inqryEndDt='+ymdhm(ce,true);
+      if(kw) url+='&bidNtceNm='+encodeURIComponent(kw);
+      return fetch(url).then(function(r){ return r.text(); }).then(function(txt){ return {ep:ep, txt:txt}; });
+    }
+    var jobs=[]; eps.forEach(function(ep){ chunks.forEach(function(ch){ jobs.push([ep, ch[0], ch[1]]); }); });
+    (function runSeq(i, acc, firstDiag){
+      if(i>=jobs.length){
+        var combined=acc.map(function(x){ return x.txt; }).join('');
+        return handleCombined(acc, firstDiag);
+      }
+      var j=jobs[i];
+      setStatus('api-status','불러오는 중… ('+(i+1)+'/'+jobs.length+' : '+epName(j[0])+')');
+      fetchOne(j[0], j[1], j[2]).then(function(res){
+        acc.push(res);
+        var d=null; try{ d=JSON.parse(res.txt); }catch(e){}
+        var dg = d? null : res.txt.slice(0,200);
+        runSeq(i+1, acc, firstDiag||dg);
+      }).catch(function(err){
+        setStatus('api-status','호출 실패: '+String((err&&err.message)||err)+'. 브라우저 직접 호출이 막혔거나 키가 틀렸을 수 있습니다. 샘플로 계속 쓸 수 있습니다.','err');
+        apiFetch.disabled=false;
+      });
+      return null;
+    })(0, [], null);
+    return;
+    function handleCombined(acc, firstNonJson){
       function keysOf(o){ try{ if(o&&typeof o==='object'&&!Array.isArray(o)) return Object.keys(o).join(','); }catch(e){} return ''; }
       function deepFind(o, names, depth){
         if(o==null||depth>4) return undefined;
@@ -949,99 +976,92 @@
         if(typeof o==='object'){
           for(var k in o){ if(!Object.prototype.hasOwnProperty.call(o,k)) continue;
             var lk=String(k).toLowerCase();
-            for(var n=0;n<names.length;n++){ if(lk===names[n]) return o[k]; }
-          }
+            for(var n=0;n<names.length;n++){ if(lk===names[n]) return o[k]; } }
           for(var k2 in o){ if(!Object.prototype.hasOwnProperty.call(o,k2)) continue;
-            var v=o[k2]; if(v&&typeof v==='object'){ var f2=deepFind(v,names,depth+1); if(f2!==undefined) return f2; }
-          }
+            var v=o[k2]; if(v&&typeof v==='object'){ var f2=deepFind(v,names,depth+1); if(f2!==undefined) return f2; } }
         }
         return undefined;
       }
-      var topKeys = keysOf(data);
-      var resp = (data&&(data.response||data.Response))||data;
-      var respKeys = keysOf(resp);
-      var hdr = (resp&&(resp.header||resp.Header))||deepFind(data,['header'],2);
-      var body = (resp&&(resp.body||resp.Body))||deepFind(data,['body'],2);
-      var rc='', rm='';
-      try{
-        var rcRaw = (hdr&&(hdr.resultCode||hdr.resultcode||hdr.RESULT_CODE||hdr.code))||deepFind(data,['resultcode','result_code'],3);
-        var rmRaw = (hdr&&(hdr.resultMsg||hdr.resultmsg||hdr.RESULT_MSG||hdr.message||hdr.msg))||deepFind(data,['resultmsg','result_msg','message'],3);
-        rc = rcRaw===undefined||rcRaw===null?'':String(rcRaw);
-        rm = rmRaw===undefined||rmRaw===null?'':String(rmRaw);
-      }catch(e){}
-      var totalRaw = undefined;
-      try{
-        if(body&&typeof body==='object'&&!Array.isArray(body)){
-          if(body.totalCount!==undefined) totalRaw=body.totalCount;
-          else if(body.TotalCount!==undefined) totalRaw=body.TotalCount;
-          else if(body.totCnt!==undefined) totalRaw=body.totCnt;
-          else if(body.totalcount!==undefined) totalRaw=body.totalcount;
-        }
-        if(totalRaw===undefined) totalRaw=deepFind(data,['totalcount','totcnt','total_cnt','count'],3);
-      }catch(e){}
-      var total = (totalRaw===undefined||totalRaw===null)?null:String(totalRaw);
-      var items = null;
-      try{
-        if(body!==undefined&&body!==null){
-          if(Array.isArray(body)){ items=body; }
-          else if(typeof body==='object'){
-            var cand = body.items!==undefined?body.items:(body.Items!==undefined?body.Items:(body.item!==undefined?body.item:(body.list!==undefined?body.list:(body.itemsList!==undefined?body.itemsList:undefined))));
-            if(cand!==undefined){
-              if(cand&&typeof cand==='object'&&!Array.isArray(cand)&&cand.item!==undefined) items=cand.item;
-              else items=cand;
-            } else {
-              var df = deepFind(body,['item','list'],2);
-              if(df!==undefined) items=df;
-            }
-            if(typeof items==='string'&&items.trim()==='') items=null;
-          } else if(typeof body==='string'&&body.trim()===''){ items=null; }
-        }
-        if(!items){
-          var g = deepFind(data,['item','list'],3);
-          if(g!==undefined&&g!==null&&!(typeof g==='string'&&g.trim()==='')) items=g;
-        }
-        if(!items&&data&&(data.items||data.item||data.list)) items=data.items||data.item||data.list;
-      }catch(e){ items=null; }
-      var diag=' [진단 total='+esc(total===null?'미표시':total)+' code='+esc(rc||'없음')+' msg='+esc(rm||'없음')+' 최상위키='+esc(topKeys||'없음')+' 응답키='+esc(respKeys||'없음')+' 앞120자='+esc(String(txt).slice(0,120))+']';
-      function okCode(c){ c=String(c||'').trim().toUpperCase(); return (c===''||c==='00'||c==='0'||c==='0000'||c==='INFO-0'||c==='INFO-00'||c==='INFO-000'||c==='SUCCESS'); }
-      if(!okCode(rc)){
-        setStatus('api-status','공공데이터포털 오류 ['+esc(rc||'미표시')+'] '+esc(rm||'키·권한·호출조건을 확인하세요.')+diag,'err');
+      function okCode(c){ c=String(c||'').trim().toUpperCase(); return (c===''||c==='00'||c==='0'||c==='0000'||c==='INFO-0'||c==='INFO-00'||c==='INFO-000'||c==='SUCCESS'||c.indexOf('INFO')===0); }
+      var __allItems=[], __rc='', __rm='', __top='', __respk='', __totalShown=null;
+      acc.forEach(function(res){
+        var data=null;
+        try{ data=JSON.parse(res.txt); }catch(e){ return; }
+        var topKeys=keysOf(data);
+        var resp=(data&&(data.response||data.Response))||data;
+        var respKeys=keysOf(resp);
+        var hdr=(resp&&(resp.header||resp.Header))||deepFind(data,['header'],2);
+        var body=(resp&&(resp.body||resp.Body))||deepFind(data,['body'],2);
+        var rc='', rm='';
+        try{
+          var rcRaw=(hdr&&(hdr.resultCode||hdr.resultcode||hdr.RESULT_CODE||hdr.code))||deepFind(data,['resultcode','result_code'],3);
+          var rmRaw=(hdr&&(hdr.resultMsg||hdr.resultmsg||hdr.RESULT_MSG||hdr.message||hdr.msg))||deepFind(data,['resultmsg','result_msg','message'],3);
+          rc=rcRaw===undefined||rcRaw===null?'':String(rcRaw);
+          rm=rmRaw===undefined||rmRaw===null?'':String(rmRaw);
+        }catch(e){}
+        if(!__top&&topKeys) __top=topKeys;
+        if(!__respk&&respKeys) __respk=respKeys;
+        if(!__rc&&rc) __rc=rc;
+        if(!__rm&&rm) __rm=rm;
+        var it2=null, t2;
+        try{
+          if(body&&typeof body==='object'&&!Array.isArray(body)){
+            var c2=(body.items!==undefined?body.items:(body.Items!==undefined?body.Items:(body.item!==undefined?body.item:(body.list!==undefined?body.list:undefined))));
+            if(c2!==undefined){ it2=(c2&&typeof c2==='object'&&!Array.isArray(c2)&&c2.item!==undefined)?c2.item:c2; }
+            if(typeof it2==='string'&&it2.trim()==='') it2=null;
+            if(body.totalCount!==undefined) t2=body.totalCount;
+            else if(body.TotalCount!==undefined) t2=body.TotalCount;
+            else if(body.totCnt!==undefined) t2=body.totCnt;
+          } else if(typeof body==='string'&&body.trim()===''){ it2=null; }
+          if(!it2){ var g=deepFind(data,['item','list'],3); if(g!==undefined&&g!==null&&!(typeof g==='string'&&g.trim()==='')) it2=g; }
+          if(!it2&&data&&(data.items||data.item||data.list)) it2=data.items||data.item||data.list;
+        }catch(e){ it2=null; }
+        if(it2&&!Array.isArray(it2)) it2=[it2];
+        if(it2&&it2.length) __allItems=__allItems.concat(it2);
+        if(__totalShown===null&&t2!==undefined) __totalShown=String(t2);
+      });
+      var firstTxt=acc.length?acc[0].txt:'';
+      var diag=' [진단 total='+esc(__totalShown!==null?__totalShown:(__allItems.length?String(__allItems.length):'미표시'))+' code='+esc(__rc||'없음')+' msg='+esc(__rm||'없음')+' 최상위키='+esc(__top||'없음')+' 응답키='+esc(__respk||'없음')+' 앞120자='+esc(String(firstTxt).slice(0,120))+']';
+      diag+=' [조회: '+eps.map(epName).join('+')+' x '+chunks.length+'구간]';
+      if(!__allItems.length&&firstNonJson){
+        setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+String(firstNonJson).slice(0,200)+diag,'err');
         apiFetch.disabled=false; return;
       }
-      if(total!==null&&String(total).trim()==='0'){
-        setStatus('api-status','정상 응답인데 조건에 맞는 공고가 0건입니다(totalCount 0). 기간을 1개월로 줄이고 검색어를 비우고 다시 눌러보세요.'+diag,'err');
+      if(__rc&&!okCode(__rc)){
+        setStatus('api-status','공공데이터포털 오류 ['+esc(__rc)+'] '+esc(__rm||'키·권한·호출조건을 확인하세요.')+diag,'err');
         apiFetch.disabled=false; return;
       }
-      if(!items||(Array.isArray(items)&&items.length===0)){
-        setStatus('api-status','응답은 왔지만 공고 항목을 찾지 못했습니다. 응답 모양이 달라 파싱에 실패한 것입니다. 검색어를 비우고 기간을 1개월로 줄여 다시 눌러보세요.'+diag,'err');
+      if(!__allItems.length){
+        var zmsg='응답은 왔지만 공고 항목을 찾지 못했습니다. 응답 모양이 달라 파싱에 실패한 것입니다. 검색어를 비우고 기간을 1개월로 줄여 다시 눌러보세요.';
+        if(__totalShown!==null&&String(__totalShown).trim()==='0') zmsg='정상 응답인데 조건에 맞는 공고가 0건입니다(totalCount 0). 기간을 1개월로 줄이고 검색어를 비우고 다시 눌러보세요.';
+        setStatus('api-status',zmsg+diag,'err');
         apiFetch.disabled=false; return;
       }
-      if(!Array.isArray(items)) items=[items];
       var P=window.PICOM||{};
       var arr=P.notices||[];
       var seen={}; arr.forEach(function(n){ seen[n.title+'|'+n.org]=1; });
       var added=0, base2=1000+Math.floor(Math.random()*1000);
-      items.forEach(function(it,i){
+      __allItems.forEach(function(it,i){
         if(!it||typeof it!=='object') return;
-        var title=it.bidNtceNm||it.BID_NTCE_NM||it.bidNtceNm||'공고명 미상';
+        var title=it.bidNtceNm||it.BID_NTCE_NM||'공고명 미상';
         var org=it.ntceInsttNm||it.demandInsttNm||it.NTCE_INSTT_NM||it.DEMAND_INSTT_NM||'발주처 미상';
         var estRaw=it.presmptPrce||it.bidNtceAmt||it.asignBdgtAmt||it.PRESMPT_PRCE||0;
         var est=parseInt(String(estRaw).replace(/[^0-9]/g,''),10)||0;
         if(seen[title+'|'+org]) return; seen[title+'|'+org]=1;
         arr.push({ id:base2+i, title:String(title), org:String(org), jong:inferJong(title),
-          region:'전국', est:est, dday:ddayFrom(it.bidClseDt||it.bidNtceDt||it.BID_CLSE_DT) , lic:'공고문 확인' });
+          region:'전국', est:est, dday:ddayFrom(it.bidClseDt||it.bidNtceDt||it.BID_CLSE_DT), lic:'공고문 확인' });
         added++;
       });
       if(P){ P.notices=arr; }
       var fj=$('f-jong'), fr=$('f-region'), fm=$('f-min');
       if(fj) fj.value='all'; if(fr) fr.value='all'; if(fm) fm.value=0;
       ['f-jong','f-region','f-min','f-kw'].forEach(function(id){ var el=$(id); if(el){ el.dispatchEvent(new Event('input',{bubbles:true})); } });
-      setStatus('api-status','실제 공고 '+added+'건을 목록에 합쳤습니다. (검색어: '+(kw||'없음·전체')+', 전체 '+esc(String(total===null?'미표시':total))+'건 중 '+rows+'건 조회) 출처: 공공데이터포털 나라장터 입찰공고정보서비스','ok');
+      var totalLbl=(__totalShown!==null?__totalShown:String(__allItems.length));
+      setStatus('api-status','실제 공고 '+added+'건을 목록에 합쳤습니다. (종류:'+eps.map(epName).join('+')+' / 검색어: '+(kw||'없음·전체')+' / 전체 '+esc(totalLbl)+'건, '+chunks.length+'구간 합산) 출처: 공공데이터포털 나라장터 입찰공고정보서비스'+diag,'ok');
       apiFetch.disabled=false;
-    }).catch(function(err){
-      setStatus('api-status','호출 실패: '+esc(err&&err.message||err)+'. 브라우저 직접 호출이 막혔거나 키가 틀렸을 수 있습니다. 샘플로 계속 쓸 수 있습니다.','err');
-      apiFetch.disabled=false;
-    });
+    }
+    /* [handleCombined end] */
+
   }); }
 
   /* ===== 서류 초안 자동생성 (온디바이스 템플릿) ===== */
