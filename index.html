@@ -941,42 +941,95 @@
     fetch(url).then(function(r){ return r.text(); }).then(function(txt){
       var data=null;
       try{ data=JSON.parse(txt); }
-      catch(e){ setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+txt.slice(0,120),'err'); apiFetch.disabled=false; return; }
-      var hdr=null, body=null, items=null, total=null, rc='', rm='';
-      try{
-        var resp=data.response||data;
-        hdr=resp&&resp.header; body=resp&&resp.body;
-        if(hdr){ rc=String(hdr.resultCode||''); rm=String(hdr.resultMsg||''); }
-        if(body){
-          total=(body.totalCount!==undefined?body.totalCount:null);
-          items=body.items;
-          if(items&&typeof items==='object'&&items.item) items=items.item;
-          if(typeof items==='string'&&items.trim()==='') items=null;
+      catch(e){ setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+txt.slice(0,200),'err'); apiFetch.disabled=false; return; }
+      function keysOf(o){ try{ if(o&&typeof o==='object'&&!Array.isArray(o)) return Object.keys(o).join(','); }catch(e){} return ''; }
+      function deepFind(o, names, depth){
+        if(o==null||depth>4) return undefined;
+        if(Array.isArray(o)){ for(var i=0;i<Math.min(o.length,3);i++){ var f=deepFind(o[i],names,depth+1); if(f!==undefined) return f; } return undefined; }
+        if(typeof o==='object'){
+          for(var k in o){ if(!Object.prototype.hasOwnProperty.call(o,k)) continue;
+            var lk=String(k).toLowerCase();
+            for(var n=0;n<names.length;n++){ if(lk===names[n]) return o[k]; }
+          }
+          for(var k2 in o){ if(!Object.prototype.hasOwnProperty.call(o,k2)) continue;
+            var v=o[k2]; if(v&&typeof v==='object'){ var f2=deepFind(v,names,depth+1); if(f2!==undefined) return f2; }
+          }
         }
-        if(!items&&data.items) items=data.items;
+        return undefined;
+      }
+      var topKeys = keysOf(data);
+      var resp = (data&&(data.response||data.Response))||data;
+      var respKeys = keysOf(resp);
+      var hdr = (resp&&(resp.header||resp.Header))||deepFind(data,['header'],2);
+      var body = (resp&&(resp.body||resp.Body))||deepFind(data,['body'],2);
+      var rc='', rm='';
+      try{
+        var rcRaw = (hdr&&(hdr.resultCode||hdr.resultcode||hdr.RESULT_CODE||hdr.code))||deepFind(data,['resultcode','result_code'],3);
+        var rmRaw = (hdr&&(hdr.resultMsg||hdr.resultmsg||hdr.RESULT_MSG||hdr.message||hdr.msg))||deepFind(data,['resultmsg','result_msg','message'],3);
+        rc = rcRaw===undefined||rcRaw===null?'':String(rcRaw);
+        rm = rmRaw===undefined||rmRaw===null?'':String(rmRaw);
+      }catch(e){}
+      var totalRaw = undefined;
+      try{
+        if(body&&typeof body==='object'&&!Array.isArray(body)){
+          if(body.totalCount!==undefined) totalRaw=body.totalCount;
+          else if(body.TotalCount!==undefined) totalRaw=body.TotalCount;
+          else if(body.totCnt!==undefined) totalRaw=body.totCnt;
+          else if(body.totalcount!==undefined) totalRaw=body.totalcount;
+        }
+        if(totalRaw===undefined) totalRaw=deepFind(data,['totalcount','totcnt','total_cnt','count'],3);
+      }catch(e){}
+      var total = (totalRaw===undefined||totalRaw===null)?null:String(totalRaw);
+      var items = null;
+      try{
+        if(body!==undefined&&body!==null){
+          if(Array.isArray(body)){ items=body; }
+          else if(typeof body==='object'){
+            var cand = body.items!==undefined?body.items:(body.Items!==undefined?body.Items:(body.item!==undefined?body.item:(body.list!==undefined?body.list:(body.itemsList!==undefined?body.itemsList:undefined))));
+            if(cand!==undefined){
+              if(cand&&typeof cand==='object'&&!Array.isArray(cand)&&cand.item!==undefined) items=cand.item;
+              else items=cand;
+            } else {
+              var df = deepFind(body,['item','list'],2);
+              if(df!==undefined) items=df;
+            }
+            if(typeof items==='string'&&items.trim()==='') items=null;
+          } else if(typeof body==='string'&&body.trim()===''){ items=null; }
+        }
+        if(!items){
+          var g = deepFind(data,['item','list'],3);
+          if(g!==undefined&&g!==null&&!(typeof g==='string'&&g.trim()==='')) items=g;
+        }
+        if(!items&&data&&(data.items||data.item||data.list)) items=data.items||data.item||data.list;
       }catch(e){ items=null; }
-      if(rc&&rc!=='00'&&rc!=='0'){
-        setStatus('api-status','공공데이터포털 오류 ['+esc(rc)+'] '+esc(rm||'키·권한·호출조건을 확인하세요.'),'err');
+      var diag=' [진단 total='+esc(total===null?'미표시':total)+' code='+esc(rc||'없음')+' msg='+esc(rm||'없음')+' 최상위키='+esc(topKeys||'없음')+' 응답키='+esc(respKeys||'없음')+' 앞120자='+esc(String(txt).slice(0,120))+']';
+      function okCode(c){ c=String(c||'').trim().toUpperCase(); return (c===''||c==='00'||c==='0'||c==='0000'||c==='INFO-0'||c==='INFO-00'||c==='INFO-000'||c==='SUCCESS'); }
+      if(!okCode(rc)){
+        setStatus('api-status','공공데이터포털 오류 ['+esc(rc||'미표시')+'] '+esc(rm||'키·권한·호출조건을 확인하세요.')+diag,'err');
         apiFetch.disabled=false; return;
       }
-      if(total!==null&&String(total)==='0'){
-        setStatus('api-status','정상 응답(resultCode 00)이나 조건에 맞는 공고가 0건입니다(totalCount 0). 조회기간을 30일로 넓히거나 검색어를 비우고 다시 눌러보세요. ['+esc(rm||'NORMAL SERVICE')+']','err');
+      if(total!==null&&String(total).trim()==='0'){
+        setStatus('api-status','정상 응답인데 조건에 맞는 공고가 0건입니다(totalCount 0). 기간을 1개월로 줄이고 검색어를 비우고 다시 눌러보세요.'+diag,'err');
         apiFetch.disabled=false; return;
       }
-      if(!items){ setStatus('api-status','응답은 왔지만 공고 항목이 없습니다(totalCount '+(total===null?'미표시':esc(String(total)))+', '+esc(rm||'메시지 없음')+'). 검색어를 비우거나 기간을 넓혀보세요.','err'); apiFetch.disabled=false; return; }
+      if(!items||(Array.isArray(items)&&items.length===0)){
+        setStatus('api-status','응답은 왔지만 공고 항목을 찾지 못했습니다. 응답 모양이 달라 파싱에 실패한 것입니다. 검색어를 비우고 기간을 1개월로 줄여 다시 눌러보세요.'+diag,'err');
+        apiFetch.disabled=false; return;
+      }
       if(!Array.isArray(items)) items=[items];
       var P=window.PICOM||{};
       var arr=P.notices||[];
       var seen={}; arr.forEach(function(n){ seen[n.title+'|'+n.org]=1; });
       var added=0, base2=1000+Math.floor(Math.random()*1000);
       items.forEach(function(it,i){
-        var title=it.bidNtceNm||it.bidNtceNm||'공고명 미상';
-        var org=it.ntceInsttNm||it.demandInsttNm||it.ntceInsttNm||'발주처 미상';
-        var estRaw=it.presmptPrce||it.bidNtceAmt||it.asignBdgtAmt||it.presmptPrce||0;
+        if(!it||typeof it!=='object') return;
+        var title=it.bidNtceNm||it.BID_NTCE_NM||it.bidNtceNm||'공고명 미상';
+        var org=it.ntceInsttNm||it.demandInsttNm||it.NTCE_INSTT_NM||it.DEMAND_INSTT_NM||'발주처 미상';
+        var estRaw=it.presmptPrce||it.bidNtceAmt||it.asignBdgtAmt||it.PRESMPT_PRCE||0;
         var est=parseInt(String(estRaw).replace(/[^0-9]/g,''),10)||0;
         if(seen[title+'|'+org]) return; seen[title+'|'+org]=1;
         arr.push({ id:base2+i, title:String(title), org:String(org), jong:inferJong(title),
-          region:'전국', est:est, dday:ddayFrom(it.bidClseDt||it.bidNtceDt), lic:'공고문 확인' });
+          region:'전국', est:est, dday:ddayFrom(it.bidClseDt||it.bidNtceDt||it.BID_CLSE_DT) , lic:'공고문 확인' });
         added++;
       });
       if(P){ P.notices=arr; }
