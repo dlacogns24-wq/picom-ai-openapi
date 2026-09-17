@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>피컴 — 이길 공고만 골라주는 입찰 비서 (오픈API·AI 초안)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#12202E; --ink-soft:#2A3B4D; --muted:#5C6B7A;
+    --line:#DCE2E9; --bg:#FFFFFF; --panel:#F5F7FA; --panel-2:#EAEFF4;
+    --amber:#E8971E; --amber-deep:#B9770D; --green:#177B57; --red:#C0392B;
+    --blueprint:#16324a;
+    --shadow:0 1px 0 rgba(18,32,46,.04), 0 8px 24px -12px rgba(18,32,46,.18);
+    color-scheme: light;
+  }
+  :root[data-theme="dark"]{
+    --ink:#EAF1F8; --ink-soft:#C6D3DF; --muted:#93A2B2;
+    --line:#2A3947; --bg:#0E1720; --panel:#141F2A; --panel-2:#1B2833;
+    --amber:#F2A93B; --amber-deep:#F2A93B; --green:#3FBE90; --red:#E5766A;
+    --blueprint:#0c2437;
+    --shadow:0 1px 0 rgba(0,0,0,.3), 0 10px 30px -14px rgba(0,0,0,.6);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ink:#EAF1F8; --ink-soft:#C6D3DF; --muted:#93A2B2;
+      --line:#2A3947; --bg:#0E1720; --panel:#141F2A; --panel-2:#1B2833;
+      --amber:#F2A93B; --amber-deep:#F2A93B; --green:#3FBE90; --red:#E5766A;
+      --blueprint:#0c2437; color-scheme: dark;
+    }
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans KR", system-ui, sans-serif;
+    font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:"IBM Plex Mono", monospace; font-feature-settings:"tnum";}
+  a{color:inherit;}
+  .wrap{max-width:1120px; margin:0 auto; padding:0 24px;}
+  h1,h2,h3{line-height:1.2; letter-spacing:-.01em; margin:0;}
+
+  /* nav */
+  header.nav{position:sticky; top:0; z-index:50; background:color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter:saturate(1.4) blur(8px); border-bottom:1px solid var(--line);}
+  .nav-in{display:flex; align-items:center; gap:20px; height:64px;}
+  .brand{display:flex; align-items:center; gap:10px; font-weight:700; font-size:18px; letter-spacing:-.02em;}
+  .brand svg{display:block;}
+  .nav-links{margin-left:auto; display:flex; gap:26px; align-items:center;}
+  .nav-links a{text-decoration:none; color:var(--ink-soft); font-weight:500; font-size:15px;}
+  .nav-links a:hover{color:var(--ink);}
+  .btn{display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    border-radius:8px; font-weight:600; font-size:15px; padding:11px 18px; cursor:pointer;
+    border:1px solid transparent; text-decoration:none; transition:transform .08s ease, background .15s ease;}
+  .btn:active{transform:translateY(1px);}
+  .btn-amber{background:var(--amber); color:#241701; border-color:var(--amber-deep);}
+  .btn-amber:hover{background:var(--amber-deep); color:#fff;}
+  .btn-ghost{background:transparent; color:var(--ink); border-color:var(--line);}
+  .btn-ghost:hover{background:var(--panel);}
+  .nav .btn{padding:9px 15px;}
+
+  /* hero */
+  .hero{padding:64px 0 40px; position:relative;}
+  .hero-grid{display:grid; grid-template-columns:1.08fr .92fr; gap:48px; align-items:center;}
+  .eyebrow{display:inline-flex; align-items:center; gap:8px; color:var(--amber-deep);
+    font-weight:600; font-size:13.5px; margin-bottom:18px;}
+  .eyebrow .dot{width:7px; height:7px; border-radius:2px; background:var(--amber); transform:rotate(45deg);}
+  h1.title{font-size:clamp(34px,5vw,52px); font-weight:700; letter-spacing:-.03em;}
+  h1.title em{font-style:normal; color:var(--amber-deep); box-shadow:inset 0 -.32em 0 color-mix(in srgb,var(--amber) 26%, transparent);}
+  .lede{color:var(--ink-soft); font-size:18px; max-width:42ch; margin:20px 0 28px;}
+  .hero-cta{display:flex; gap:12px; flex-wrap:wrap;}
+  .hero-note{margin-top:16px; color:var(--muted); font-size:13.5px;}
+
+  /* blueprint preview card */
+  .bp{position:relative; border-radius:16px; padding:22px; color:#dbe8f3;
+    background:
+      linear-gradient(0deg, rgba(255,255,255,.03) 1px, transparent 1px) 0 0/100% 26px,
+      linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px) 0 0/26px 100%,
+      radial-gradient(120% 120% at 100% 0%, #1d4a6b 0, var(--blueprint) 60%),
+      var(--blueprint);
+    box-shadow:var(--shadow); border:1px solid rgba(255,255,255,.08);}
+  .bp h4{font-size:13px; color:#8fb4d2; font-weight:600; margin:0 0 4px;}
+  .bp .match{display:flex; align-items:baseline; gap:10px; margin-bottom:16px;}
+  .bp .match b{font-size:40px; font-weight:700; color:#fff; letter-spacing:-.02em;}
+  .bp .match span{color:#a8c6de; font-size:14px;}
+  .bp-row{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:11px 13px; border-radius:9px; background:rgba(255,255,255,.05); margin-bottom:8px;
+    border:1px solid rgba(255,255,255,.06);}
+  .bp-row .t{font-size:13.5px; color:#e8f2fb; font-weight:500;}
+  .bp-row .m{font-size:12px; color:#9fc0da;}
+  .bp-tag{font-size:11px; font-weight:600; padding:3px 8px; border-radius:20px;
+    background:rgba(232,151,30,.18); color:#f5c274; white-space:nowrap;}
+  .bp-profit{margin-top:14px; padding-top:14px; border-top:1px dashed rgba(255,255,255,.14);
+    display:flex; justify-content:space-between; align-items:center;}
+  .bp-profit span{color:#a8c6de; font-size:13px;}
+  .bp-profit b{color:#7fe0b6; font-size:20px; font-weight:700;}
+
+  /* sections */
+  section{padding:56px 0;}
+  .sec-head{max-width:56ch; margin-bottom:34px;}
+  .sec-head .kicker{color:var(--amber-deep); font-weight:600; font-size:14px; margin-bottom:10px;}
+  h2.sec-title{font-size:clamp(26px,3.4vw,34px); font-weight:700; letter-spacing:-.02em;}
+  .sec-head p{color:var(--ink-soft); font-size:17px; margin:12px 0 0;}
+
+  .band{background:var(--panel); border-top:1px solid var(--line); border-bottom:1px solid var(--line);}
+
+  /* problem list */
+  .prob{display:grid; grid-template-columns:repeat(2,1fr); gap:14px;}
+  .prob-item{display:flex; gap:14px; padding:20px; background:var(--bg); border:1px solid var(--line); border-radius:12px;}
+  .prob-item .n{font-family:"IBM Plex Mono",monospace; color:var(--amber-deep); font-weight:600; font-size:14px; padding-top:2px;}
+  .prob-item p{margin:0; color:var(--ink-soft); font-size:15.5px;}
+  .prob-item b{color:var(--ink); font-weight:600;}
+
+  /* features */
+  .feat{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .feat-c{background:var(--bg); padding:24px 22px;}
+  .feat-c .ic{width:38px; height:38px; border-radius:9px; display:grid; place-items:center; background:var(--panel-2); margin-bottom:14px;}
+  .feat-c h3{font-size:17px; font-weight:700; margin-bottom:7px;}
+  .feat-c p{margin:0; color:var(--muted); font-size:14px;}
+  .feat-c .step{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--amber-deep); font-weight:600;}
+
+  /* pricing */
+  .price{display:grid; grid-template-columns:repeat(3,1fr); gap:16px; align-items:stretch;}
+  .plan{border:1px solid var(--line); border-radius:14px; padding:26px 24px; background:var(--bg); display:flex; flex-direction:column;}
+  .plan.feature{border-color:var(--amber); box-shadow:0 0 0 1px var(--amber), var(--shadow); position:relative;}
+  .plan .badge{position:absolute; top:-11px; left:24px; background:var(--amber); color:#241701; font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px;}
+  .plan h3{font-size:16px; font-weight:600; color:var(--muted);}
+  .plan .amt{margin:12px 0 4px; font-size:34px; font-weight:700; letter-spacing:-.02em;}
+  .plan .amt small{font-size:15px; font-weight:500; color:var(--muted);}
+  .plan .desc{color:var(--ink-soft); font-size:14px; min-height:40px;}
+  .plan ul{list-style:none; padding:0; margin:16px 0 0; display:flex; flex-direction:column; gap:9px;}
+  .plan li{display:flex; gap:9px; font-size:14.5px; color:var(--ink-soft);}
+  .plan li svg{flex:none; margin-top:3px;}
+  .price-extra{margin-top:18px; display:grid; grid-template-columns:repeat(3,1fr); gap:14px;}
+  .xtra{background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px;}
+  .xtra .k{font-size:13px; color:var(--muted); margin-bottom:4px;}
+  .xtra .v{font-size:16px; font-weight:600;}
+  .xtra .v em{font-style:normal; color:var(--amber-deep);}
+  .compare{margin-top:14px; padding:16px 18px; border-radius:12px; border:1px dashed var(--amber);
+    background:color-mix(in srgb,var(--amber) 8%, var(--bg)); font-size:15px; color:var(--ink-soft);}
+  .compare b{color:var(--ink);}
+  .strike{color:var(--muted); text-decoration:line-through;}
+
+  /* demo */
+  .demo-grid{display:grid; grid-template-columns:1.15fr .85fr; gap:20px; align-items:start;}
+  .card{background:var(--bg); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow);}
+  .card-h{padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .card-h h3{font-size:16px; font-weight:700;}
+  .card-h .count{font-size:13px; color:var(--muted);}
+  .card-h .count b{color:var(--amber-deep);}
+  .filters{padding:16px 20px; display:grid; grid-template-columns:1fr 1fr; gap:12px; border-bottom:1px solid var(--line); background:var(--panel);}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field.full{grid-column:1 / -1;}
+  .field label{font-size:12.5px; color:var(--muted); font-weight:500;}
+  select, input[type=text], input[type=number]{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:8px;
+    background:var(--bg); color:var(--ink); font-family:inherit; font-size:14.5px;}
+  input:focus, select:focus{outline:2px solid var(--amber); outline-offset:1px; border-color:var(--amber);}
+  .list{max-height:430px; overflow:auto;}
+  .notice{padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:14px; align-items:flex-start;}
+  .notice:last-child{border-bottom:none;}
+  .notice .body{flex:1; min-width:0;}
+  .notice .top{display:flex; align-items:center; gap:8px; margin-bottom:3px; flex-wrap:wrap;}
+  .chip{font-size:11px; font-weight:600; padding:2px 8px; border-radius:20px; background:var(--panel-2); color:var(--ink-soft);}
+  .chip.jeon{background:#fdeccd; color:#8a5a06;}
+  .chip.tong{background:#d9ecff; color:#1c5a94;}
+  .chip.sobang{background:#ffe0dd; color:#a23227;}
+  .chip.sisul{background:#e0efe4; color:#2c6b41;}
+  :root[data-theme="dark"] .chip.jeon,@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip.jeon{background:#4a3410;color:#f0c073;}}
+  .notice .title{font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .notice .meta{font-size:12.5px; color:var(--muted); margin-top:2px;}
+  .notice .meta .mono{color:var(--ink-soft);}
+  .notice .right{display:flex; flex-direction:column; align-items:flex-end; gap:7px;}
+  .notice .est{font-weight:700; font-size:15px;}
+  .dday{font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px; background:var(--panel-2); color:var(--ink-soft);}
+  .dday.soon{background:#ffe0dd; color:#a23227;}
+  .pick{border:1px solid var(--line); background:var(--bg); color:var(--ink); font-size:12.5px; font-weight:600;
+    padding:6px 10px; border-radius:7px; cursor:pointer; white-space:nowrap;}
+  .pick:hover{background:var(--amber); color:#241701; border-color:var(--amber-deep);}
+  .empty{padding:40px 20px; text-align:center; color:var(--muted); font-size:14px;}
+
+  /* calculator */
+  .calc-note{font-size:12.5px; color:var(--muted); padding:12px 20px 0;}
+  .calc-body{padding:16px 20px;}
+  .calc-target{background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin-bottom:14px;}
+  .calc-target .lab{font-size:12px; color:var(--muted);}
+  .calc-target .val{font-weight:600; font-size:14.5px; margin-top:2px;}
+  .crow{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .crow label{flex:none; width:74px; font-size:13.5px; color:var(--ink-soft);}
+  .crow .unit{flex:none; color:var(--muted); font-size:13px;}
+  .result{margin-top:16px; border-top:1px solid var(--line); padding-top:16px;}
+  .result .rowr{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:14px; color:var(--ink-soft);}
+  .result .rowr .mono{color:var(--ink);}
+  .net{display:flex; justify-content:space-between; align-items:baseline; margin-top:6px; padding:14px; border-radius:10px; background:var(--panel);}
+  .net .lab{font-weight:600;}
+  .net .big{font-size:26px; font-weight:700;}
+  .net .big.pos{color:var(--green);} .net .big.neg{color:var(--red);}
+  .margin{font-size:13px; color:var(--muted); text-align:right; margin-top:6px;}
+  .margin b.pos{color:var(--green);} .margin b.neg{color:var(--red);}
+
+  /* cta */
+  .cta-band{background:var(--blueprint); color:#eaf3fb;
+    background-image:
+      linear-gradient(0deg, rgba(255,255,255,.028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.028) 1px, transparent 1px);
+    background-size:30px 30px, 30px 30px;}
+  .cta-in{padding:60px 0; text-align:center;}
+  .cta-in h2{font-size:clamp(26px,3.6vw,36px); color:#fff; font-weight:700;}
+  .cta-in p{color:#a8c6de; font-size:17px; margin:14px auto 26px; max-width:52ch;}
+
+  /* services: 서류 + 매칭 */
+  .svc-grid{display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:start;}
+  .doc-pick{padding:16px 20px; display:grid; grid-template-columns:1fr 1fr; gap:10px; border-bottom:1px solid var(--line);}
+  .doc-opt{text-align:left; border:1px solid var(--line); background:var(--bg); border-radius:10px; padding:12px 13px; cursor:pointer; transition:border-color .12s, background .12s;}
+  .doc-opt:hover{border-color:var(--amber);}
+  .doc-opt.on{border-color:var(--amber); background:color-mix(in srgb,var(--amber) 9%, var(--bg)); box-shadow:0 0 0 1px var(--amber);}
+  .doc-opt .dn{font-weight:600; font-size:14.5px;}
+  .doc-opt .dl{font-size:12px; margin-top:3px;}
+  .lv{display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:20px;}
+  .lv.simple{background:#e0efe4; color:#2c6b41;}
+  .lv.complex{background:#fdeccd; color:#8a5a06;}
+  .doc-detail{padding:16px 20px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid var(--line); background:var(--panel);}
+  .doc-detail .info{font-size:13.5px; color:var(--ink-soft);}
+  .doc-detail .info b{color:var(--ink);}
+  .req-list{padding:8px 20px 16px;}
+  .req-list .rl-title{font-size:12.5px; color:var(--muted); margin:10px 0 6px;}
+  .req-item{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 0; border-bottom:1px dashed var(--line); font-size:14px;}
+  .req-item:last-child{border-bottom:none;}
+  .status{font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:20px; background:#e0efe4; color:#2c6b41;}
+  .fee-box{padding:16px 20px; border-top:1px solid var(--line); background:var(--panel);}
+  .fee-box .frow{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .fee-box .frow label{flex:none; width:96px; font-size:13.5px; color:var(--ink-soft);}
+  .fee-out{display:flex; justify-content:space-between; align-items:baseline; padding-top:6px;}
+  .fee-out .lab{font-size:13.5px; color:var(--muted);}
+  .fee-out b{font-size:20px; font-weight:700; color:var(--amber-deep);}
+  .cap-note{font-size:12px; color:var(--muted); margin-top:4px; text-align:right;}
+
+  /* application form */
+  .form-wrap{max-width:720px; margin:0 auto; background:var(--bg); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); padding:30px;}
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .form-grid .full{grid-column:1 / -1;}
+  .form-grid .field label{font-size:13px; color:var(--ink-soft); font-weight:500;}
+  .req-mark{color:var(--red);}
+  .checks{display:flex; flex-wrap:wrap; gap:10px; margin-top:6px;}
+  .chk{display:inline-flex; align-items:center; gap:7px; border:1px solid var(--line); border-radius:20px; padding:7px 13px; cursor:pointer; font-size:14px; user-select:none;}
+  .chk input{accent-color:var(--amber-deep); width:15px; height:15px;}
+  .chk.on{border-color:var(--amber); background:color-mix(in srgb,var(--amber) 9%, var(--bg));}
+  .form-actions{margin-top:20px; display:flex; align-items:center; gap:14px;}
+  .form-err{color:var(--red); font-size:13.5px; min-height:18px;}
+  .success{text-align:center; padding:26px 10px;}
+  .success .ok{width:56px; height:56px; border-radius:50%; background:color-mix(in srgb,var(--green) 16%, var(--bg)); display:grid; place-items:center; margin:0 auto 14px;}
+  .success h3{font-size:22px; font-weight:700; margin-bottom:8px;}
+  .success p{color:var(--ink-soft); margin:0 auto; max-width:44ch;}
+  .success .recap{margin-top:18px; text-align:left; background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px 18px; font-size:14px; color:var(--ink-soft);}
+  .success .recap div{margin-bottom:4px;} .success .recap b{color:var(--ink);}
+
+  @media (max-width:900px){
+    .svc-grid{grid-template-columns:1fr;}
+    .form-grid{grid-template-columns:1fr;}
+    .doc-pick{grid-template-columns:1fr;}
+  }
+
+  footer{padding:34px 0; border-top:1px solid var(--line); color:var(--muted); font-size:13px;}
+  .foot-in{display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap;}
+  .disclaimer{margin-top:8px; font-size:12px; color:var(--muted); max-width:70ch;}
+
+  @media (max-width:900px){
+    .hero-grid{grid-template-columns:1fr; gap:32px;}
+    .demo-grid{grid-template-columns:1fr;}
+    .feat{grid-template-columns:repeat(2,1fr);}
+    .price{grid-template-columns:1fr;}
+    .prob{grid-template-columns:1fr;}
+    .price-extra{grid-template-columns:1fr;}
+    .nav-links a:not(.btn){display:none;}
+  }
+  @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto; transition:none!important;}}
+
+  /* 오픈API + AI 패널 */
+  .api-box,.ai-box{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:var(--panel);}
+  .api-box h4,.ai-box h4{margin:0 0 6px;font-size:15px;}
+  .api-box p,.ai-box p{margin:6px 0;font-size:13.5px;color:var(--muted);}
+  .api-row{display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:8px;}
+  .api-row .field{min-width:150px;flex:1;}
+  .api-row label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:4px;}
+  .api-row input{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:var(--bg);color:var(--ink);}
+  .btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+  .btn-sm{padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:13.5px;cursor:pointer;min-height:40px;}
+  .btn-sm.primary{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:600;}
+  .status{margin-top:8px;font-size:13.5px;min-height:20px;}
+  .status.ok{color:var(--green);} .status.err{color:var(--red);}
+  .draft{margin-top:10px;border:1px dashed var(--line);border-radius:10px;padding:12px;background:var(--bg);font-size:13.5px;white-space:pre-wrap;}
+  .draft table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;}
+  .draft th,.draft td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
+  .draft th{background:var(--panel);}
+  .priv{font-size:12px;color:var(--muted);margin-top:8px;}
+  .src-tag{display:inline-block;font-size:11.5px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin-left:6px;color:var(--muted);}
+
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <div class="brand">
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <rect x="1" y="1" width="24" height="24" rx="6" fill="#12202E"/>
+        <path d="M13 5 L18 19 L13 15.5 L8 19 Z" fill="#E8971E"/>
+      </svg>
+      피컴
+    </div>
+    <nav class="nav-links">
+      <a href="#problem">문제</a>
+      <a href="#features">기능</a>
+      <a href="#pricing">요금</a>
+      <a href="#demo">데모</a>
+      <a href="#services">서류·매칭</a>
+      <a href="#apply" class="btn btn-amber">창립 멤버 신청</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow"><span class="dot"></span> 민간 건설업체를 위한 입찰 비서</div>
+      <h1 class="title">수천 건 공고에서,<br><em>이길 공고만.</em></h1>
+      <p class="lede">회사 조건에 맞는 공고를 자동으로 골라주고, 서류·순수익 계산·협력사 연결까지 한 곳에서. 공고 뒤지는 시간을 없앱니다.</p>
+      <div class="hero-cta">
+        <a href="#apply" class="btn btn-amber">창립 멤버 신청하기</a>
+        <a href="#demo" class="btn btn-ghost">데모 먼저 써보기</a>
+      </div>
+      <p class="hero-note">매칭 수수료 <b class="mono">0.5%</b> · 업계 표준 <span class="strike">1.5%</span> 대비 3분의 1</p>
+    </div>
+    <div class="bp" aria-hidden="true">
+      <h4>내 회사 조건 · 전기공사 / 대전</h4>
+      <div class="match"><b>3</b><span>건 참여 가능 (전체 8건 중)</span></div>
+      <div class="bp-row"><div><div class="t">배전설비 개선공사</div><div class="m mono">한국전력 · 3.2억 · D-4</div></div><div class="bp-tag">규격 적합</div></div>
+      <div class="bp-row"><div><div class="t">비상발전기 교체</div><div class="m mono">OO병원 · 1.75억 · D-5</div></div><div class="bp-tag">규격 적합</div></div>
+      <div class="bp-row"><div><div class="t">교실 LED 조명 교체</div><div class="m mono">OO교육청 · 8,500만 · D-2</div></div><div class="bp-tag">규격 적합</div></div>
+      <div class="bp-profit"><span>선택 공고 예상 순수익</span><b class="mono">+3,840만</b></div>
+    </div>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section id="problem" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">문제</div>
+      <h2 class="sec-title">공고 뒤지는 시간이, 매달 사라집니다</h2>
+      <p>소규모 건설업체는 담당자 한 명 두기도 빠듯한데, 입찰 실무는 갈수록 무거워집니다.</p>
+    </div>
+    <div class="prob">
+      <div class="prob-item"><span class="n">01</span><p>하루 <b>수백~수천 건</b> 공고 중, 우리 조건(업종·지역·실적·규격)에 맞는 걸 손으로 골라야 합니다.</p></div>
+      <div class="prob-item"><span class="n">02</span><p>견적서·적격심사·제안서 <b>서류 작성</b>에 매번 반나절이 들어갑니다.</p></div>
+      <div class="prob-item"><span class="n">03</span><p>따도 남는지, <b>순수익</b>은 넣기 전에 계산이 어렵습니다.</p></div>
+      <div class="prob-item"><span class="n">04</span><p>실적·면허가 모자라면 <b>같이 할 회사</b>를 찾느라 또 시간이 듭니다.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">기능</div>
+      <h2 class="sec-title">고르고, 계산하고, 써주고, 연결합니다</h2>
+    </div>
+    <div class="feat">
+      <div class="feat-c">
+        <div class="ic">🎯</div>
+        <div class="step">STEP 1</div>
+        <h3>맞춤 공고 선별</h3>
+        <p>회사 조건과 공고를 자동 대조해, 참여 가능한 공고만 골라 알림(텔레그램·카톡)으로 보냅니다.</p>
+      </div>
+      <div class="feat-c">
+        <div class="ic">🧮</div>
+        <div class="step">STEP 2</div>
+        <h3>순수익 계산</h3>
+        <p>투찰가와 원가를 넣으면 순수익과 이익률을 바로 계산해, 넣을지 말지 판단을 돕습니다.</p>
+      </div>
+      <div class="feat-c">
+        <div class="ic">📄</div>
+        <div class="step">STEP 3</div>
+        <h3>서류 대행</h3>
+        <p>견적서·물품내역서·적격심사·제안서를 대신 작성합니다. 간단·복잡 난이도로 나눠 처리합니다.</p>
+      </div>
+      <div class="feat-c">
+        <div class="ic">🤝</div>
+        <div class="step">STEP 4</div>
+        <h3>협력사 매칭</h3>
+        <p>실적·면허가 부족한 공고엔, 필요한 협력사·자재사를 찾아 연결합니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section id="pricing" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">요금</div>
+      <h2 class="sec-title">알림 툴보다 조금 위, 담당자 인건비보다 훨씬 아래</h2>
+    </div>
+    <div class="price">
+      <div class="plan">
+        <h3>무료</h3>
+        <div class="amt">0<small>원</small></div>
+        <div class="desc">제한된 기본 알림으로 먼저 맛보기.</div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 기본 공고 알림(제한)</li>
+        </ul>
+      </div>
+      <div class="plan">
+        <h3>라이트</h3>
+        <div class="amt">4.9<small>만원 / 월</small></div>
+        <div class="desc">공고 선별 + 알림 + 순수익 계산.</div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 맞춤 공고 선별·무제한 알림</li>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 순수익 계산기</li>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 마이 입찰 달력</li>
+        </ul>
+      </div>
+      <div class="plan feature">
+        <div class="badge">가장 인기</div>
+        <h3>프로</h3>
+        <div class="amt">9.9<small>만원 / 월</small></div>
+        <div class="desc">라이트 전부 + 간단 서류 대행 2건 포함.</div>
+        <ul>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 라이트의 모든 기능</li>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> <b>간단 서류 대행 월 2건 포함</b></li>
+          <li><svg width="15" height="15" viewBox="0 0 15 15"><path d="M3 8l3 3 6-7" stroke="#E8971E" stroke-width="2" fill="none" stroke-linecap="round"/></svg> 우선 지원</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="price-extra">
+      <div class="xtra"><div class="k">서류 대행 · 간단(견적서 등)</div><div class="v">건당 5만원~ <span style="font-size:12px;color:var(--muted)">(프로 2건 무료)</span></div></div>
+      <div class="xtra"><div class="k">서류 대행 · 복잡(적격·제안서)</div><div class="v">건당 15만원~</div></div>
+      <div class="xtra"><div class="k">협력사 매칭 수수료</div><div class="v"><em>거래액 0.5%</em> · 상한 200만원</div></div>
+    </div>
+
+    <div class="compare">
+      <b>창립 멤버 특가</b> — 라이트를 첫 3개월 <b>월 2.9만원</b>으로 시작하고, 이후 정가(4.9만원)로 전환 후 <b>가격 동결</b>. 나중에 정가가 올라도 창립 멤버는 그대로.
+    </div>
+  </div>
+</section>
+
+<!-- DEMO -->
+<section id="demo">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">데모</div>
+      <h2 class="sec-title">직접 써보세요 — 조건에 맞는 공고 선별 + 순수익 계산</h2>
+      <p>내 회사 조건을 바꾸면 참여 가능한 공고가 추려집니다. 공고의 ‘이 공고로 계산’을 누르면 오른쪽 계산기로 넘어갑니다. (키를 넣으면 실제 나라장터 공고를 불러오고, 키가 없으면 샘플 8건으로 동작합니다. 검색어를 비우면 기간 내 전체 공고를 가져옵니다.)</p>
+    <div class="api-box" id="apiBox">
+      <h4>실시간 공고 불러오기 (나라장터 오픈API) <span class="src-tag">공공데이터포털</span></h4>
+      <p>조달청_나라장터 입찰공고정보서비스를 호출합니다. 키는 이 기기 브라우저에만 저장되고, 서버로 보내지 않습니다.</p>
+      <div class="api-row">
+        <div class="field" style="flex:2;min-width:220px;"><label for="api-key">서비스키 (공공데이터포털 Decoding 키)</label><input type="text" id="api-key" autocomplete="off" placeholder="공공데이터포털에서 발급받은 Decoding 키 붙여넣기"></div>
+        <div class="field"><label for="api-kw">공고명 검색어</label><input type="text" id="api-kw" value="전기" placeholder="예: 전기, 통신, 소방"></div>
+        <div class="field" style="max-width:110px;"><label for="api-rows">건수</label><input type="number" id="api-rows" value="20" min="1" max="100"></div>
+      </div>
+      <div class="api-row">
+        <div class="field"><label for="api-bgn">조회 시작일</label><input type="date" id="api-bgn" value="2026-08-18"></div>
+        <div class="field"><label for="api-end">조회 종료일</label><input type="date" id="api-end" value="2026-09-17"></div>
+        <div class="field" style="max-width:150px;"><label for="api-div">조회 기준</label><select id="api-div"><option value="1" selected>공고게시일시</option><option value="2">입찰마감일시</option></select></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn-sm primary" id="api-fetch">실제 공고 불러오기</button>
+        <button class="btn-sm" id="api-clear">샘플로 되돌리기</button>
+        <button class="btn-sm" id="api-key-clear">저장된 키 지우기</button>
+      </div>
+      <div class="status" id="api-status">키가 없으면 샘플 8건으로 동작합니다. 검색어를 비우면 기간 내 전체 공고를 가져옵니다.</div>
+      <div class="priv">입력한 키는 이 기기 브라우저(localStorage)에만 저장됩니다. 공개 페이지 특성상 키를 코드에 넣지 마세요. 호출이 계속 막히면(키 오류·차단) 정식 운영용 중계가 필요합니다.</div>
+    </div>
+    </div>
+
+    <div class="demo-grid">
+      <!-- 선별 -->
+      <div class="card">
+        <div class="card-h">
+          <h3>공고 선별</h3>
+          <div class="count"><b id="cnt">0</b>건 참여 가능</div>
+        </div>
+        <div class="filters">
+          <div class="field">
+            <label for="f-jong">내 업종</label>
+            <select id="f-jong">
+              <option value="all">전체</option>
+              <option value="전기" selected>전기공사</option>
+              <option value="통신">정보통신</option>
+              <option value="소방">소방</option>
+              <option value="시설물">시설물</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-region">내 지역</label>
+            <select id="f-region">
+              <option value="all">전체</option>
+              <option value="대전" selected>대전</option>
+              <option value="세종">세종</option>
+              <option value="충남">충남</option>
+              <option value="충북">충북</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="f-min">최소 추정금액 (억)</label>
+            <input type="number" id="f-min" value="0" min="0" step="0.1">
+          </div>
+          <div class="field">
+            <label for="f-kw">키워드</label>
+            <input type="text" id="f-kw" placeholder="예: 조명, 발전기">
+          </div>
+        </div>
+        <div class="list" id="list"></div>
+      </div>
+
+      <!-- 계산기 -->
+      <div class="card">
+        <div class="card-h">
+          <h3>순수익 계산기</h3>
+        </div>
+        <div class="calc-note">공고를 선택하면 투찰가·원가가 예시로 채워집니다. 값은 직접 수정하세요.</div>
+        <div class="calc-body">
+          <div class="calc-target">
+            <div class="lab">선택 공고</div>
+            <div class="val" id="c-title">왼쪽에서 공고를 선택하세요</div>
+          </div>
+          <div class="crow"><label for="c-bid">투찰가</label><input type="number" id="c-bid" value="0" step="100"><span class="unit mono">만원</span></div>
+          <div class="crow"><label for="c-mat">자재비</label><input type="number" id="c-mat" value="0" step="100"><span class="unit mono">만원</span></div>
+          <div class="crow"><label for="c-lab">인건비</label><input type="number" id="c-lab" value="0" step="100"><span class="unit mono">만원</span></div>
+          <div class="crow"><label for="c-out">외주비</label><input type="number" id="c-out" value="0" step="100"><span class="unit mono">만원</span></div>
+          <div class="crow"><label for="c-etc">기타경비</label><input type="number" id="c-etc" value="0" step="100"><span class="unit mono">만원</span></div>
+
+          <div class="result">
+            <div class="rowr"><span>투찰가</span><span class="mono" id="r-bid">0원</span></div>
+            <div class="rowr"><span>− 총원가</span><span class="mono" id="r-cost">0원</span></div>
+            <div class="net"><span class="lab">순수익</span><span class="big pos mono" id="r-net">0원</span></div>
+            <div class="margin">순이익률 <b class="pos" id="r-margin">0%</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- SERVICES: 서류 + 매칭 -->
+<section id="services" class="band">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="kicker">서류 · 매칭</div>
+      <h2 class="sec-title">서류는 대신 써주고, 필요한 회사는 이어줍니다</h2>
+      <p>선별한 공고에 바로 서류 대행을 요청하고, 실적·면허가 모자라면 협력사를 찾아 연결합니다. (샘플 데모)</p>
+    </div>
+    <div class="svc-grid">
+      <!-- 서류 대행 -->
+      <div class="card">
+        <div class="card-h"><h3>서류 대행 요청</h3></div>
+        <div class="doc-pick" id="docPick"></div>
+        <div class="doc-detail">
+          <div class="info" id="docInfo">서류 유형을 선택하세요.</div>
+          <button class="btn btn-amber" id="docAdd" disabled style="padding:9px 15px;">요청 추가</button>
+        </div>
+        <div class="req-list">
+          <div class="rl-title">내 요청</div>
+          <div id="reqList"><div class="empty" style="padding:16px 0;">아직 요청이 없습니다.</div></div>
+        <div class="ai-box" id="docAiBox">
+          <h4>서류 초안 자동생성 <span class="src-tag">온디바이스 템플릿</span></h4>
+          <p>위에서 고른 서류 유형 + 계산기의 선택 공고·금액으로 초안을 만듭니다. 외부 전송 없이 이 페이지에서 생성됩니다.</p>
+          <div class="btn-row">
+            <button class="btn-sm primary" id="ai-doc-make">선택 공고로 초안 만들기</button>
+            <button class="btn-sm" id="ai-doc-copy">초안 복사</button>
+          </div>
+          <div class="status" id="ai-doc-status">서류 유형을 먼저 고르고, 계산기에서 공고를 선택하세요.</div>
+          <div class="draft" id="ai-doc-out">아직 생성된 초안이 없습니다.</div>
+          <div class="priv">생성된 초안은 이 기기에만 저장됩니다. 제출 전 금액·규격·면허 조건을 반드시 확인하세요. 게시 후 사장님 AI를 연결하면 문장형 초안으로 업그레이드됩니다.</div>
+        </div>
+        </div>
+      </div>
+      <!-- 협력사 매칭 -->
+      <div class="card">
+        <div class="card-h">
+          <h3>협력사 매칭</h3>
+          <div class="count"><b id="pcnt">0</b>곳 매칭</div>
+        </div>
+        <div class="filters">
+          <div class="field">
+            <label for="p-jong">필요 업종</label>
+            <select id="p-jong">
+              <option value="all">전체</option>
+              <option value="전기" selected>전기</option>
+              <option value="통신">통신</option>
+              <option value="소방">소방</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="p-region">지역</label>
+            <select id="p-region">
+              <option value="all" selected>전체</option>
+              <option value="대전">대전</option>
+              <option value="세종">세종</option>
+              <option value="충남">충남</option>
+              <option value="충북">충북</option>
+            </select>
+          </div>
+        </div>
+        <div class="list" id="pList" style="max-height:230px;"></div>
+        <div class="fee-box">
+          <div class="frow"><label for="fee-in">예상 거래액</label><input type="number" id="fee-in" value="10000" step="1000"><span class="unit mono">만원</span></div>
+          <div class="fee-out"><span class="lab">매칭 수수료 (0.5%, 상한 200만원)</span><b class="mono" id="fee-out">0원</b></div>
+          <div class="cap-note" id="cap-note"></div>
+        <div class="ai-box" id="partnerAiBox">
+          <h4>협력사 추천사유 자동생성 <span class="src-tag">온디바이스 템플릿</span></h4>
+          <p>위 필터(필요 업종·지역)와 예상 거래액으로 후보 순위를 매기고, 추천 사유를 붙여줍니다.</p>
+          <div class="btn-row">
+            <button class="btn-sm primary" id="ai-partner-make">추천사유 만들기</button>
+          </div>
+          <div class="status" id="ai-partner-status"></div>
+          <div class="draft" id="ai-partner-out">아직 생성된 추천이 없습니다.</div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-band">
+  <div class="wrap cta-in">
+    <h2>이길 공고만 책상에 올려드립니다</h2>
+    <p>창립 멤버로 먼저 시작하세요. 첫 3개월 월 2.9만원, 그리고 가격 동결.</p>
+    <a href="#apply" class="btn btn-amber">창립 멤버 신청하기</a>
+  </div>
+</div>
+
+<!-- APPLY FORM -->
+<section id="apply">
+  <div class="wrap">
+    <div class="sec-head" style="text-align:center; margin-left:auto; margin-right:auto;">
+      <div class="kicker">창립 멤버 신청</div>
+      <h2 class="sec-title">먼저 시작하고, 가격은 그대로 지키세요</h2>
+    </div>
+    <div class="form-wrap" id="formWrap">
+      <div class="form-grid">
+        <div class="field"><label>회사명 <span class="req-mark">*</span></label><input type="text" id="a-company" placeholder="예: OO전기"></div>
+        <div class="field"><label>담당자명 <span class="req-mark">*</span></label><input type="text" id="a-name" placeholder="예: 홍길동"></div>
+        <div class="field"><label>연락처 <span class="req-mark">*</span></label><input type="text" id="a-phone" placeholder="예: 010-1234-5678"></div>
+        <div class="field"><label>이메일</label><input type="text" id="a-email" placeholder="예: name@company.com"></div>
+        <div class="field"><label>업종</label>
+          <select id="a-jong"><option>전기</option><option>통신</option><option>소방</option><option>시설물</option><option>기타</option></select>
+        </div>
+        <div class="field"><label>지역</label>
+          <select id="a-region"><option>대전</option><option>세종</option><option>충남</option><option>충북</option><option>기타</option></select>
+        </div>
+        <div class="field full">
+          <label>관심 기능</label>
+          <div class="checks" id="a-checks">
+            <label class="chk on"><input type="checkbox" value="공고 선별" checked> 공고 선별</label>
+            <label class="chk"><input type="checkbox" value="순수익 계산"> 순수익 계산</label>
+            <label class="chk"><input type="checkbox" value="서류 대행"> 서류 대행</label>
+            <label class="chk"><input type="checkbox" value="협력사 매칭"> 협력사 매칭</label>
+          </div>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-amber" id="submitBtn">신청 접수하기</button>
+        <span class="form-err" id="formErr"></span>
+      </div>
+      <p class="priv">입력하신 연락처는 창립 멤버 안내 등 문의 응대 목적으로만 사용되며, 이 데모에서는 서버로 전송되지 않고 화면 확인용으로만 쓰입니다.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot-in">
+    <div><strong>피컴</strong> <span style="color:var(--muted)">(가칭)</span></div>
+    <div>© 2026 · 데모 사이트</div>
+  </div>
+  <div class="wrap">
+    <p class="disclaimer">본 사이트는 기획 데모입니다. 공고·요금·계산 결과는 작동 방식을 보여주기 위한 샘플이며, 서비스키를 입력하면 나라장터 오픈API로 실제 공고를 불러옵니다(키 미입력 시 샘플 8건 동작). 요금·수수료는 시장 벤치마크에 근거한 제안값으로, 확정 전 원가·지불의사 검증이 필요합니다.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var notices = [
+    {id:1, title:"배전설비 개선공사", org:"한국전력 OO지사", jong:"전기", region:"대전", est:320000000, dday:4, lic:"전기공사업"},
+    {id:2, title:"교실 LED 조명 교체", org:"OO교육청", jong:"전기", region:"세종", est:85000000, dday:2, lic:"전기공사업"},
+    {id:3, title:"청사 소방시설 정비", org:"OO시청", jong:"소방", region:"대전", est:140000000, dday:6, lic:"소방시설공사업"},
+    {id:4, title:"구내 통신망 증설", org:"OO공사", jong:"통신", region:"충남", est:62000000, dday:3, lic:"정보통신공사업"},
+    {id:5, title:"도로 표지판 시설물 설치", org:"OO구청", jong:"시설물", region:"대전", est:47000000, dday:1, lic:"시설물"},
+    {id:6, title:"실습동 전기 증설공사", org:"OO대학교", jong:"전기", region:"충북", est:210000000, dday:8, lic:"전기공사업"},
+    {id:7, title:"비상발전기 교체", org:"OO병원", jong:"전기", region:"대전", est:175000000, dday:5, lic:"전기공사업"},
+    {id:8, title:"CCTV·통신 통합공사", org:"OO물류센터", jong:"통신", region:"세종", est:98000000, dday:7, lic:"정보통신공사업"}
+  ];
+  var jongClass = {"전기":"jeon","통신":"tong","소방":"sobang","시설물":"sisul"};
+
+  function won(n){ return Math.round(n).toLocaleString('ko-KR') + '원'; }
+  function compact(n){
+    if(n>=100000000){ var v=n/100000000; return (Number.isInteger(v)?v:v.toFixed(1))+'억'; }
+    if(n>=10000){ return Math.round(n/10000).toLocaleString('ko-KR')+'만'; }
+    return n.toLocaleString('ko-KR');
+  }
+
+  var $ = function(id){ return document.getElementById(id); };
+  var fJong=$('f-jong'), fRegion=$('f-region'), fMin=$('f-min'), fKw=$('f-kw');
+
+  function render(){
+    var jong=fJong.value, region=fRegion.value;
+    var min=(parseFloat(fMin.value)||0)*100000000;
+    var kw=(fKw.value||'').trim();
+    var list=$('list'); list.innerHTML='';
+    var matched = notices.filter(function(n){
+      if(jong!=='all' && n.jong!==jong) return false;
+      if(region!=='all' && n.region!==region) return false;
+      if(n.est < min) return false;
+      if(kw && (n.title+n.org).indexOf(kw)===-1) return false;
+      return true;
+    });
+    $('cnt').textContent = matched.length;
+    if(matched.length===0){
+      list.innerHTML='<div class="empty">조건에 맞는 공고가 없습니다. 업종·지역·금액을 넓혀보세요.</div>';
+      return;
+    }
+    matched.forEach(function(n){
+      var el=document.createElement('div'); el.className='notice';
+      var soon = n.dday<=2 ? ' soon' : '';
+      var body=document.createElement('div'); body.className='body';
+      var top=document.createElement('div'); top.className='top';
+      var chip=document.createElement('span'); chip.className='chip '+(jongClass[n.jong]||''); chip.textContent=n.jong;
+      var title=document.createElement('span'); title.className='title'; title.textContent=n.title;
+      top.appendChild(chip); top.appendChild(title);
+      var meta=document.createElement('div'); meta.className='meta'; meta.textContent=n.org+' · '+n.region+' · '+n.lic;
+      body.appendChild(top); body.appendChild(meta);
+      var right=document.createElement('div'); right.className='right';
+      var dd=document.createElement('span'); dd.className='dday'+soon; dd.textContent='D-'+n.dday;
+      var est=document.createElement('span'); est.className='est mono'; est.textContent=compact(n.est);
+      var btn=document.createElement('button'); btn.className='pick'; btn.setAttribute('data-id', n.id); btn.textContent='이 공고로 계산 →';
+      right.appendChild(dd); right.appendChild(est); right.appendChild(btn);
+      el.appendChild(body); el.appendChild(right);
+      list.appendChild(el);
+    });
+    list.querySelectorAll('.pick').forEach(function(b){
+      b.addEventListener('click', function(){ loadCalc(parseInt(this.getAttribute('data-id'),10)); });
+    });
+  }
+
+  // calculator
+  var cBid=$('c-bid'), cMat=$('c-mat'), cLab=$('c-lab'), cOut=$('c-out'), cEtc=$('c-etc');
+  function loadCalc(id){
+    var n = notices.filter(function(x){return x.id===id;})[0];
+    if(!n) return;
+    $('c-title').textContent = n.title + ' · ' + n.org;
+    var bidMan = Math.round(n.est*0.88/10000); // 예정가 근처 투찰가(만원)
+    cBid.value = bidMan;
+    cMat.value = Math.round(bidMan*0.45);
+    cLab.value = Math.round(bidMan*0.28);
+    cOut.value = Math.round(bidMan*0.12);
+    cEtc.value = Math.round(bidMan*0.05);
+    calc();
+    document.getElementById('demo').scrollIntoView({behavior:'smooth', block:'start'});
+  }
+  function num(el){ return (parseFloat(el.value)||0)*10000; } // 만원 → 원
+  function calc(){
+    var bid=num(cBid);
+    var cost=num(cMat)+num(cLab)+num(cOut)+num(cEtc);
+    var net=bid-cost;
+    var margin = bid>0 ? (net/bid*100) : 0;
+    $('r-bid').textContent = won(bid);
+    $('r-cost').textContent = won(cost);
+    var netEl=$('r-net'); netEl.textContent=(net>=0?'+':'−')+won(Math.abs(net));
+    netEl.className='big mono '+(net>=0?'pos':'neg');
+    var mEl=$('r-margin'); mEl.textContent=margin.toFixed(1)+'%';
+    mEl.className=(net>=0?'pos':'neg');
+  }
+
+  [fJong,fRegion,fMin,fKw].forEach(function(e){ e.addEventListener('input', render); });
+  [cBid,cMat,cLab,cOut,cEtc].forEach(function(e){ e.addEventListener('input', calc); });
+
+  window.PICOM=window.PICOM||{}; window.PICOM.notices=notices; window.PICOM.selected=null; document.addEventListener('click',function(e){ var b=e.target&&e.target.closest?e.target.closest('.pick[data-id]'):null; if(b){ var id=parseInt(b.getAttribute('data-id'),10); var f=notices.filter(function(x){return x.id===id;}); if(f[0]) window.PICOM.selected=f[0]; } });
+  render(); calc();
+
+  /* ---- 서류 대행 ---- */
+  var docs = [
+    {name:"견적서", level:"간단", price:"5만원~", days:"1~2일"},
+    {name:"물품내역서", level:"간단", price:"5만원~", days:"1~2일"},
+    {name:"적격심사 서류", level:"복잡", price:"15만원~", days:"2~3일"},
+    {name:"제안서", level:"복잡", price:"15만원~", days:"3~5일"}
+  ];
+  var docPick=$('docPick'), docInfo=$('docInfo'), docAdd=$('docAdd'), reqList=$('reqList');
+  var selDoc=null, requests=[];
+  docs.forEach(function(d,i){
+    var b=document.createElement('button'); b.className='doc-opt'; b.dataset.i=i;
+    b.innerHTML='<div class="dn">'+d.name+'</div><div class="dl"><span class="lv '+(d.level==='간단'?'simple':'complex')+'">'+d.level+'</span></div>';
+    b.addEventListener('click', function(){
+      docPick.querySelectorAll('.doc-opt').forEach(function(x){x.classList.remove('on');});
+      b.classList.add('on'); selDoc=docs[i];
+      docInfo.innerHTML='<b>'+selDoc.name+'</b> · '+selDoc.level+' · 예상 '+selDoc.price+' · 납기 '+selDoc.days;
+      docAdd.disabled=false;
+    });
+    docPick.appendChild(b);
+  });
+  docAdd.addEventListener('click', function(){
+    if(!selDoc) return;
+    requests.push(selDoc);
+    reqList.innerHTML = requests.map(function(r){
+      return '<div class="req-item"><span><b>'+r.name+'</b> <span class="lv '+(r.level==='간단'?'simple':'complex')+'" style="margin-left:6px;">'+r.level+'</span> · '+r.price+'</span><span class="status">접수됨</span></div>';
+    }).join('');
+  });
+
+  /* ---- 협력사 매칭 ---- */
+  var partners=[
+    {name:"OO전기", jong:"전기", region:"대전", jeok:12, jibun:"30%~"},
+    {name:"OO이엔지", jong:"전기", region:"세종", jeok:8, jibun:"49%~"},
+    {name:"OO엔지니어링", jong:"전기", region:"대전", jeok:20, jibun:"25%~"},
+    {name:"OO통신", jong:"통신", region:"대전", jeok:15, jibun:"30%~"},
+    {name:"OO시스템", jong:"통신", region:"충북", jeok:9, jibun:"30%~"},
+    {name:"OO소방", jong:"소방", region:"충남", jeok:6, jibun:"40%~"}
+  ];
+  var pJong=$('p-jong'), pRegion=$('p-region'), pList=$('pList');
+  function renderP(){
+    var j=pJong.value, r=pRegion.value;
+    var m=partners.filter(function(p){
+      if(j!=='all'&&p.jong!==j) return false;
+      if(r!=='all'&&p.region!==r) return false; return true;
+    });
+    $('pcnt').textContent=m.length;
+    if(!m.length){ pList.innerHTML='<div class="empty">조건에 맞는 협력사가 없습니다.</div>'; return; }
+    pList.innerHTML=m.map(function(p){
+      return '<div class="notice"><div class="body"><div class="top"><span class="chip '+(jongClass[p.jong]||'')+'">'+p.jong+'</span><span class="title">'+p.name+'</span></div>'+
+        '<div class="meta">'+p.region+' · 실적 <span class="mono">'+p.jeok+'건</span> · 가능 지분 <span class="mono">'+p.jibun+'</span></div></div>'+
+        '<div class="right"><button class="pick">매칭 요청</button></div></div>';
+    }).join('');
+    pList.querySelectorAll('.pick').forEach(function(b){
+      b.addEventListener('click', function(){ this.textContent='요청됨 ✓'; this.style.background='var(--green)'; this.style.color='#fff'; this.style.borderColor='var(--green)'; });
+    });
+  }
+  var feeIn=$('fee-in');
+  function calcFee(){
+    var amt=(parseFloat(feeIn.value)||0)*10000;
+    var raw=amt*0.005, capped=Math.min(raw, 2000000);
+    $('fee-out').textContent=won(capped);
+    $('cap-note').textContent = raw>2000000 ? '상한 200만원 적용 (원래 '+won(raw)+')' : '';
+  }
+  [pJong,pRegion].forEach(function(e){ e.addEventListener('input', renderP); });
+  feeIn.addEventListener('input', calcFee);
+  window.PICOM=window.PICOM||{}; window.PICOM.partners=partners; window.PICOM.docs=docs;
+  renderP(); calcFee();
+
+  /* ---- 신청 폼 ---- */
+  $('a-checks').querySelectorAll('.chk').forEach(function(l){
+    var cb=l.querySelector('input');
+    cb.addEventListener('change', function(){ l.classList.toggle('on', cb.checked); });
+  });
+  var submitLock=false;
+  function escHtml(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  $('submitBtn').addEventListener('click', function(){
+    if(submitLock) return;
+    var company=$('a-company').value.trim(), name=$('a-name').value.trim(), phone=$('a-phone').value.trim();
+    var emailEl=$('a-email'); var email=emailEl?emailEl.value.trim():'';
+    var err=$('formErr');
+    if(!company||!name||!phone){ err.textContent='회사명·담당자명·연락처는 필수입니다.'; return; }
+    if(!/^[0-9\- ]{9,15}$/.test(phone)){ err.textContent='연락처 형식을 확인하세요. 예: 010-1234-5678'; return; }
+    if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ err.textContent='이메일 형식을 확인하세요. 예: name@company.com'; return; }
+    err.textContent='';
+    submitLock=true; var btn=$('submitBtn'); btn.disabled=true;
+    var feats=[]; $('a-checks').querySelectorAll('input:checked').forEach(function(c){ feats.push(c.value); });
+    var wrap=$('formWrap');
+    wrap.innerHTML='<div class="success">'+
+      '<div class="ok"><svg width="28" height="28" viewBox="0 0 28 28"><path d="M7 15l4 4 10-11" stroke="#177B57" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>'+
+      '<h3>신청이 접수되었습니다</h3>'+
+      '<p>창립 멤버 특가(첫 3개월 월 2.9만원 + 가격 동결) 안내를 곧 연락처로 보내드리겠습니다.</p>'+
+      '<div class="recap"><div><b>회사</b> · '+escHtml(company)+' ('+escHtml($('a-jong').value)+' / '+escHtml($('a-region').value)+')</div>'+
+      '<div><b>담당자</b> · '+escHtml(name)+' · '+escHtml(phone)+'</div>'+
+      '<div><b>관심 기능</b> · '+escHtml(feats.length?feats.join(', '):'—')+'</div></div>'+
+      '<p class="priv">입력하신 연락처는 문의 응대 목적으로만 사용되며, 이 데모에서는 서버로 전송되지 않고 이 화면 확인용으로만 쓰입니다.</p>'+
+      '</div>';
+    try{ localStorage.setItem('picom_apply', JSON.stringify({company:company, name:name, phone:phone, email:email, jong:$('a-jong').value, region:$('a-region').value, feats:feats, at:new Date().toISOString()})); }catch(e){}
+    wrap.scrollIntoView({behavior:'smooth', block:'center'});
+  });
+})();
+</script>
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(v){ return String(v==null?'':v); }
+  function won(n){ return Math.round(n).toLocaleString('ko-KR')+'원'; }
+  function numMan(id){ var el=$(id); return el ? ((parseFloat(el.value)||0)*10000) : 0; }
+  function setStatus(id, msg, cls){ var el=$(id); if(!el) return; el.textContent=msg; el.className='status'+(cls?' '+cls:''); }
+
+  /* ===== 서비스키: 이 기기에만 저장 ===== */
+  var KEY='picom_serviceKey';
+  try{ var sv=localStorage.getItem(KEY); if(sv && $('api-key')){ $('api-key').value=sv; setStatus('api-status','저장된 키가 있습니다. “실제 공고 불러오기”를 누르면 조회합니다.','ok'); } }catch(e){}
+  var apiKeyEl=$('api-key');
+  if(apiKeyEl){ apiKeyEl.addEventListener('input', function(){ try{ localStorage.setItem(KEY, apiKeyEl.value.trim()); }catch(e){} }); }
+
+  function inferJong(title){
+    var t=esc(title);
+    if(/전기|LED|발전|배전|조명|변전/.test(t)) return '전기';
+    if(/통신|CCTV|네트워크|망|정보/.test(t)) return '통신';
+    if(/소방|스프링클러|화재/.test(t)) return '소방';
+    if(/시설|표지|토목|건축|도로/.test(t)) return '시설물';
+    return '전기';
+  }
+  function ddayFrom(dt){
+    if(!dt) return 7;
+    var d=esc(dt).replace(/[^0-9]/g,'');
+    if(d.length<8) return 7;
+    var y=+d.slice(0,4), m=+d.slice(4,6)-1, dd=+d.slice(6,8);
+    var close=new Date(y,m,dd,23,59,59); var now=new Date();
+    var diff=Math.ceil((close-now)/86400000); if(isNaN(diff)) return 7;
+    return diff<0?0:diff;
+  }
+
+  var apiFetch=$('api-fetch'), apiClear=$('api-clear');
+  if(apiClear){ apiClear.addEventListener('click', function(){ location.reload(); }); }
+  var apiKeyClear=$('api-key-clear');
+  if(apiKeyClear){ apiKeyClear.addEventListener('click', function(){ try{ localStorage.removeItem(KEY); }catch(e){} var k=$('api-key'); if(k) k.value=''; setStatus('api-status','저장된 키를 지웠습니다. 샘플 8건으로 동작합니다.','ok'); }); }
+  if(apiFetch){ apiFetch.addEventListener('click', function(){
+    var key=$('api-key')?$('api-key').value.trim():'';
+    var kw=$('api-kw')?$('api-kw').value.trim():'전기';
+    var rows=$('api-rows')?Math.min(100,Math.max(1,parseInt($('api-rows').value||'20',10))):20;
+    if(!key){ setStatus('api-status','서비스키를 먼저 입력하세요. 키가 없으면 샘플 8건이 그대로 보입니다.','err'); return; }
+    try{ localStorage.setItem(KEY,key); }catch(e){}
+    setStatus('api-status','불러오는 중…');
+    apiFetch.disabled=true;
+    function ymdhm(d, endOfDay){ var p=function(x){return String(x).padStart(2,'0');}; return ''+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+(endOfDay?'2359':'0000'); }
+    function readDate(id, fallback){ var el=$(id); var v=el&&el.value?el.value:null; if(!v) return fallback; var a=v.split('-'); var d=new Date(+a[0],(+a[1])-1,+a[2]); return isNaN(d)?fallback:d; }
+    var bgn=readDate('api-bgn', new Date(2026,7,18)); var end=readDate('api-end', new Date(2026,8,17));
+    if(bgn>end){ setStatus('api-status','조회 시작일이 종료일보다 늦습니다. 날짜를 확인하세요.','err'); apiFetch.disabled=false; return; }
+    var div=$('api-div')?$('api-div').value:'1';
+    var base='https://apis.data.go.kr/1230000/BidPublicInfoService02/getBidPblancListInfoServcPPSSrch';
+    var url=base+'?serviceKey='+encodeURIComponent(key)+'&numOfRows='+rows+'&pageNo=1&type=json&inqryDiv='+encodeURIComponent(div)+'&inqryBgnDt='+ymdhm(bgn,false)+'&inqryEndDt='+ymdhm(end,true);
+    if(kw) url+='&bidNtceNm='+encodeURIComponent(kw);
+    fetch(url).then(function(r){ return r.text(); }).then(function(txt){
+      var data=null;
+      try{ data=JSON.parse(txt); }
+      catch(e){ setStatus('api-status','JSON이 아닌 응답이 왔습니다(키 오류·차단 가능). 응답 앞부분: '+txt.slice(0,120),'err'); apiFetch.disabled=false; return; }
+      var hdr=null, body=null, items=null, total=null, rc='', rm='';
+      try{
+        var resp=data.response||data;
+        hdr=resp&&resp.header; body=resp&&resp.body;
+        if(hdr){ rc=String(hdr.resultCode||''); rm=String(hdr.resultMsg||''); }
+        if(body){
+          total=(body.totalCount!==undefined?body.totalCount:null);
+          items=body.items;
+          if(items&&typeof items==='object'&&items.item) items=items.item;
+          if(typeof items==='string'&&items.trim()==='') items=null;
+        }
+        if(!items&&data.items) items=data.items;
+      }catch(e){ items=null; }
+      if(rc&&rc!=='00'&&rc!=='0'){
+        setStatus('api-status','공공데이터포털 오류 ['+esc(rc)+'] '+esc(rm||'키·권한·호출조건을 확인하세요.'),'err');
+        apiFetch.disabled=false; return;
+      }
+      if(total!==null&&String(total)==='0'){
+        setStatus('api-status','정상 응답(resultCode 00)이나 조건에 맞는 공고가 0건입니다(totalCount 0). 조회기간을 30일로 넓히거나 검색어를 비우고 다시 눌러보세요. ['+esc(rm||'NORMAL SERVICE')+']','err');
+        apiFetch.disabled=false; return;
+      }
+      if(!items){ setStatus('api-status','응답은 왔지만 공고 항목이 없습니다(totalCount '+(total===null?'미표시':esc(String(total)))+', '+esc(rm||'메시지 없음')+'). 검색어를 비우거나 기간을 넓혀보세요.','err'); apiFetch.disabled=false; return; }
+      if(!Array.isArray(items)) items=[items];
+      var P=window.PICOM||{};
+      var arr=P.notices||[];
+      var seen={}; arr.forEach(function(n){ seen[n.title+'|'+n.org]=1; });
+      var added=0, base2=1000+Math.floor(Math.random()*1000);
+      items.forEach(function(it,i){
+        var title=it.bidNtceNm||it.bidNtceNm||'공고명 미상';
+        var org=it.ntceInsttNm||it.demandInsttNm||it.ntceInsttNm||'발주처 미상';
+        var estRaw=it.presmptPrce||it.bidNtceAmt||it.asignBdgtAmt||it.presmptPrce||0;
+        var est=parseInt(String(estRaw).replace(/[^0-9]/g,''),10)||0;
+        if(seen[title+'|'+org]) return; seen[title+'|'+org]=1;
+        arr.push({ id:base2+i, title:String(title), org:String(org), jong:inferJong(title),
+          region:'전국', est:est, dday:ddayFrom(it.bidClseDt||it.bidNtceDt), lic:'공고문 확인' });
+        added++;
+      });
+      if(P){ P.notices=arr; }
+      var fj=$('f-jong'), fr=$('f-region'), fm=$('f-min');
+      if(fj) fj.value='all'; if(fr) fr.value='all'; if(fm) fm.value=0;
+      ['f-jong','f-region','f-min','f-kw'].forEach(function(id){ var el=$(id); if(el){ el.dispatchEvent(new Event('input',{bubbles:true})); } });
+      setStatus('api-status','실제 공고 '+added+'건을 목록에 합쳤습니다. (검색어: '+(kw||'없음·전체')+', 전체 '+esc(String(total===null?'미표시':total))+'건 중 '+rows+'건 조회) 출처: 공공데이터포털 나라장터 입찰공고정보서비스','ok');
+      apiFetch.disabled=false;
+    }).catch(function(err){
+      setStatus('api-status','호출 실패: '+esc(err&&err.message||err)+'. 브라우저 직접 호출이 막혔거나 키가 틀렸을 수 있습니다. 샘플로 계속 쓸 수 있습니다.','err');
+      apiFetch.disabled=false;
+    });
+  }); }
+
+  /* ===== 서류 초안 자동생성 (온디바이스 템플릿) ===== */
+  function curDoc(){
+    var on=document.querySelector('#docPick .doc-opt.on');
+    if(!on) return null;
+    var P=window.PICOM||{}; var docs=P.docs||[{name:'견적서'},{name:'물품내역서'},{name:'적격심사 서류'},{name:'제안서'}];
+    var i=parseInt(on.getAttribute('data-i')||'0',10);
+    return docs[i]||{name:on.textContent.trim().split('\n')[0]||'서류'};
+  }
+  function curNotice(){
+    var P=window.PICOM||{};
+    if(P.selected) return P.selected;
+    var t=$('c-title')?$('c-title').textContent:'';
+    if(t&&t.indexOf('선택하세요')===-1){ return {title:t, org:'', est:0}; }
+    return null;
+  }
+  var docMake=$('ai-doc-make'), docCopy=$('ai-doc-copy');
+  if(docMake){ docMake.addEventListener('click', function(){
+    docMake.disabled=true;
+    setTimeout(function(){
+      var doc=curDoc(), n=curNotice();
+      var out=$('ai-doc-out');
+      if(!doc){ setStatus('ai-doc-status','위에서 서류 유형(견적서·물품내역서·적격심사·제안서)을 먼저 선택하세요.','err'); docMake.disabled=false; return; }
+      if(!n){ setStatus('ai-doc-status','계산기에서 공고를 먼저 선택하세요(공고 목록의 “이 공고로 계산”).','err'); docMake.disabled=false; return; }
+      var bid=numMan('c-bid'), mat=numMan('c-mat'), lab=numMan('c-lab'), outc=numMan('c-out'), etc=numMan('c-etc');
+      var cost=mat+lab+outc+etc, net=bid-cost;
+      var margin=bid>0?(net/bid*100):0;
+      var dn=esc(doc.name||'서류');
+      out.innerHTML='';
+      var h=document.createElement('div'); h.textContent='['+dn+' 초안] '+(n.title||''); out.appendChild(h);
+      var sub=document.createElement('div'); sub.textContent='발주처: '+(n.org||'—'); out.appendChild(sub);
+      if(dn.indexOf('제안')===-1 && dn.indexOf('적격')===-1){
+        var tb=document.createElement('table');
+        var rows=[['항목','금액'],['투찰가',won(bid)],['자재비',won(mat)],['인건비',won(lab)],['외주비',won(outc)],['기타경비',won(etc)],['총원가',won(cost)],['순수익',won(net)+' ('+margin.toFixed(1)+'%)']];
+        rows.forEach(function(r,i){
+          var tr=document.createElement('tr');
+          var c1=document.createElement(i===0?'th':'td'); c1.textContent=r[0];
+          var c2=document.createElement(i===0?'th':'td'); c2.textContent=r[1];
+          tr.appendChild(c1); tr.appendChild(c2); tb.appendChild(tr);
+        });
+        out.appendChild(tb);
+        var memo=document.createElement('div'); memo.textContent='메모: 위 금액은 계산기 입력값 그대로입니다. 제출 전 단가·규격·면허 조건을 확인하세요.'; out.appendChild(memo);
+      } else {
+        var ol=['1. 사업 이해 — '+(n.title||'공고')+'의 요구사항·납기·규격을 확인했습니다.',
+          '2. 수행 계획 — 자재 '+won(mat)+' · 인력 '+won(lab)+' · 외주 '+won(outc)+' 배분으로 '+won(bid)+'에 수행합니다.',
+          '3. 일정 — 계약 후 자재 발주→시공→시험→인수 순서로 진행합니다.',
+          '4. 실적·면허 — '+(n.lic||'요구 면허')+' 보유 및 유사 실적을 갖추고, 부족분은 협력사와 공동 수행합니다.',
+          '5. 안전·품질 — 안전관리·하자보수 계획을 포함합니다.'];
+        ol.forEach(function(line){ var p=document.createElement('div'); p.textContent=line; out.appendChild(p); });
+        var memo2=document.createElement('div'); memo2.textContent='위 목차를 공고문 문구에 맞춰 한 줄씩 채우면 '+dn+' 1차 초안이 됩니다.'; out.appendChild(memo2);
+      }
+      try{ localStorage.setItem('picom_doc_draft', out.textContent.slice(0,4000)); }catch(e){}
+      setStatus('ai-doc-status','초안을 만들었습니다. “초안 복사”로 가져가서 금액·문구를 다듬으세요.','ok');
+      docMake.disabled=false;
+    }, 50);
+  }); }
+  if(docCopy){ docCopy.addEventListener('click', function(){
+    var t=$('ai-doc-out')?$('ai-doc-out').textContent:'';
+    if(!t||t.indexOf('아직 생성')!==-1){ setStatus('ai-doc-status','먼저 초안을 만드세요.','err'); return; }
+    function done(){ setStatus('ai-doc-status','초안을 복사했습니다.','ok'); }
+    function fail(){ setStatus('ai-doc-status','자동 복사가 안 되면 초안을 길게 눌러 직접 복사하세요.','err'); }
+    if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done, fail); }
+    else { var ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); done(); }catch(e){ fail(); } document.body.removeChild(ta); }
+  }); }
+
+  /* ===== 협력사 추천사유 자동생성 ===== */
+  var pMake=$('ai-partner-make');
+  if(pMake){ pMake.addEventListener('click', function(){
+    pMake.disabled=true;
+    setTimeout(function(){
+      var P=window.PICOM||{}; var list=(P.partners||[]).slice();
+      var out=$('ai-partner-out');
+      if(!list.length){ setStatus('ai-partner-status','협력사 목록이 비어 있습니다.','err'); pMake.disabled=false; return; }
+      var j=$('p-jong')?$('p-jong').value:'all';
+      var r=$('p-region')?$('p-region').value:'all';
+      var amt=numMan('fee-in');
+      var n=curNotice();
+      var scored=list.map(function(p){
+        var sc=0; var why=[];
+        if(j!=='all'&&p.jong===j){ sc+=3; why.push('필요 업종('+p.jong+') 일치'); }
+        if(r!=='all'&&p.region===r){ sc+=2; why.push('지역('+p.region+') 일치'); }
+        if(r==='all'){ sc+=1; why.push('지역 무관 후보'); }
+        var jr=parseInt(p.jeok||0,10)||0;
+        sc+=Math.min(2, jr/10); why.push('실적 '+jr+'건');
+        why.push('가능 지분 '+p.jibun);
+        if(n&&n.title){ why.push('“'+n.title+'” 수행 시 공동이행 후보'); }
+        if(amt>0){ var fee=Math.min(amt*0.005,2000000); why.push('예상 수수료 '+won(fee)); }
+        return {p:p, sc:sc, why:why};
+      });
+      scored.sort(function(a,b){ return b.sc-a.sc; });
+      var show=scored.filter(function(x){ return (j==='all'||x.p.jong===j)&&(r==='all'||x.p.region===r); }).slice(0,3);
+      if(!show.length) show=scored.slice(0,3);
+      out.innerHTML='';
+      show.forEach(function(x,i){
+        var d=document.createElement('div');
+        d.textContent=(i+1)+'. '+x.p.name+' ('+x.p.jong+'·'+x.p.region+') — '+x.why.join(' · ');
+        out.appendChild(d);
+      });
+      setStatus('ai-partner-status', show.length+'곳 추천을 만들었습니다. “매칭 요청” 버튼으로 연락을 진행하세요.','ok');
+      pMake.disabled=false;
+    }, 50);
+  }); }
+
+  /* 방문자 AI 연결 슬롯: 게시 후 내 앱 → AI 연결에서 키를 등록하면 이 함수가 실제 답변으로 교체됩니다. */
+  window.PICOM_ASK_AI = window.PICOM_ASK_AI || function(){ return '방문자 AI가 아직 연결되지 않았습니다. 온디바이스 초안을 먼저 쓰세요.'; };
+})();
+</script>
+<script>
+(function(){ function guard(){ var h=location.hash; if(!h) return; var ok=['#problem','#features','#pricing','#demo','#services','#apply']; if(ok.indexOf(h)===-1){ history.replaceState(null,'',location.pathname); window.scrollTo(0,0); } } window.addEventListener('hashchange', guard); guard(); })();
+</script>
+
+<!--ethos-badge--><div style="text-align:center;padding:16px 8px 20px;font:12px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#9aa1a9">이 페이지는 <a href="https://ethos.ai.kr" target="_blank" rel="noopener" style="color:#8a919b;text-decoration:underline">에토스AI 코드</a>로 만들어졌습니다</div>
+</body>
+</html>
