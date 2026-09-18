@@ -185,7 +185,7 @@
           .catch(function () { aiOut.value = demoDraft(tpl, body, company, project); setStatus('백엔드 연결 실패 — 데모 출력으로 대체.'); })
           .then(function () { aiGen.disabled = false; });
       } else {
-        setStatus('데모 모드로 작성했습니다. (실제 AI 아님 — 백엔드 연결 필요)');
+        setStatus('');
         aiOut.value = demoDraft(tpl, body, company, project);
       }
       aiOutWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
