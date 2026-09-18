@@ -297,6 +297,7 @@
   .draft th,.draft td{border:1px solid var(--line);padding:6px 8px;text-align:left;}
   .draft th{background:var(--panel);}
   .priv{font-size:12px;color:var(--muted);margin-top:8px;}
+  .key-wrap{display:flex;gap:6px;align-items:stretch;} .key-wrap input{flex:1;min-width:0;} .key-wrap .btn-sm{white-space:nowrap;flex:none;} .key-opt{display:flex;gap:6px;align-items:center;font-size:12.5px;color:var(--muted);margin-top:6px;font-weight:400;} .key-opt input{width:16px;height:16px;} #api-key.key-mask{-webkit-text-security:disc;font-family:monospace;letter-spacing:1px;} #api-key:not(.key-mask){font-family:monospace;}
   .src-tag{display:inline-block;font-size:11.5px;border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin-left:6px;color:var(--muted);}
 
 </style>
@@ -441,7 +442,7 @@
       <h4>실시간 공고 불러오기 (나라장터 오픈API) <span class="src-tag">공공데이터포털</span></h4>
       <p>조달청_나라장터 입찰공고정보서비스를 호출합니다. 키는 이 기기 브라우저에만 저장되고, 서버로 보내지 않습니다.</p>
       <div class="api-row">
-        <div class="field" style="flex:2;min-width:220px;"><label for="api-key">서비스키 (공공데이터포털 Decoding 키)</label><input type="text" id="api-key" autocomplete="off" placeholder="공공데이터포털에서 발급받은 Decoding 키 붙여넣기"></div>
+        <div class="field" style="flex:2;min-width:220px;"><label for="api-key">서비스키 (공공데이터포털 Decoding 키)</label><div class="key-wrap"><input type="text" id="api-key" class="key-mask" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text" placeholder="공공데이터포털에서 발급받은 Decoding 키 붙여넣기 (화면에는 ●●●●로 보입니다)"><button type="button" class="btn-sm" id="api-key-toggle" aria-label="키 보기 전환">보기</button></div><label class="key-opt"><input type="checkbox" id="api-key-nosave"> 이 기기에 저장하지 않고 1회만 사용</label></div>
         <div class="field"><label for="api-kw">공고명 검색어</label><input type="text" id="api-kw" value="전기" placeholder="예: 전기, 통신, 소방"></div>
         <div class="field" style="max-width:110px;"><label for="api-rows">건수</label><input type="number" id="api-rows" value="20" min="1" max="100"></div>
       </div>
@@ -456,7 +457,7 @@
         <button class="btn-sm" id="api-key-clear">저장된 키 지우기</button>
       </div>
       <div class="status" id="api-status">키가 없으면 샘플 8건으로 동작합니다. 검색어를 비우면 기간 내 전체 공고를 가져옵니다.</div>
-      <div class="priv">입력한 키는 이 기기 브라우저(localStorage)에만 저장됩니다. 공개 페이지 특성상 키를 코드에 넣지 마세요. 호출이 계속 막히면(키 오류·차단) 정식 운영용 중계가 필요합니다.</div>
+      <div class="priv">입력한 키는 화면에 ●●●●로 가려져 표시되고, 코드 파일에는 저장되지 않습니다. “1회만 사용”을 켜면 브라우저에도 남지 않습니다. 브라우저 직접 호출 특성상 전송 순간 주소창·개발자도구 네트워크에는 키가 보일 수 있어, 완전 차단이 필요하면 정식 운영용 중계가 필요합니다.</div>
     </div>
     </div>
 
@@ -873,11 +874,16 @@
   function numMan(id){ var el=$(id); return el ? ((parseFloat(el.value)||0)*10000) : 0; }
   function setStatus(id, msg, cls){ var el=$(id); if(!el) return; el.textContent=msg; el.className='status'+(cls?' '+cls:''); }
 
-  /* ===== 서비스키: 이 기기에만 저장 ===== */
+  /* ===== 서비스키: 화면에 가려서 표시, 코드에 저장 안 함 ===== */
   var KEY='picom_serviceKey';
-  try{ var sv=localStorage.getItem(KEY); if(sv && $('api-key')){ $('api-key').value=sv; setStatus('api-status','저장된 키가 있습니다. “실제 공고 불러오기”를 누르면 조회합니다.','ok'); } }catch(e){}
+  function isNoSave(){ var c=$('api-key-nosave'); return !!(c && c.checked); }
+  try{ var sv=localStorage.getItem(KEY); if(sv && $('api-key')){ $('api-key').value=sv; setStatus('api-status','저장된 키가 있습니다(화면에는 가려져 보입니다). “실제 공고 불러오기”를 누르면 조회합니다.','ok'); } }catch(e){}
   var apiKeyEl=$('api-key');
-  if(apiKeyEl){ apiKeyEl.addEventListener('input', function(){ try{ localStorage.setItem(KEY, apiKeyEl.value.trim()); }catch(e){} }); }
+  if(apiKeyEl){ apiKeyEl.addEventListener('input', function(){ if(isNoSave()){ try{ localStorage.removeItem(KEY); }catch(e){} return; } try{ localStorage.setItem(KEY, apiKeyEl.value.trim()); }catch(e){} }); }
+  var apiKeyToggle=$('api-key-toggle');
+  if(apiKeyToggle){ apiKeyToggle.addEventListener('click', function(){ var k=$('api-key'); if(!k) return; var masked=k.classList.contains('key-mask'); if(masked){ k.classList.remove('key-mask'); apiKeyToggle.textContent='가리기'; } else { k.classList.add('key-mask'); apiKeyToggle.textContent='보기'; } }); }
+  var apiKeyNoSave=$('api-key-nosave');
+  if(apiKeyNoSave){ apiKeyNoSave.addEventListener('change', function(){ if(apiKeyNoSave.checked){ try{ localStorage.removeItem(KEY); }catch(e){} setStatus('api-status','1회 사용 모드입니다. 키는 이 기기에 저장되지 않습니다.','ok'); } }); }
 
   function inferJong(title){
     var t=esc(title);
@@ -900,13 +906,13 @@
   var apiFetch=$('api-fetch'), apiClear=$('api-clear');
   if(apiClear){ apiClear.addEventListener('click', function(){ location.reload(); }); }
   var apiKeyClear=$('api-key-clear');
-  if(apiKeyClear){ apiKeyClear.addEventListener('click', function(){ try{ localStorage.removeItem(KEY); }catch(e){} var k=$('api-key'); if(k) k.value=''; setStatus('api-status','저장된 키를 지웠습니다. 샘플 8건으로 동작합니다.','ok'); }); }
+  if(apiKeyClear){ apiKeyClear.addEventListener('click', function(){ try{ localStorage.removeItem(KEY); }catch(e){} var k=$('api-key'); if(k){ k.value=''; k.classList.add('key-mask'); } var tg=$('api-key-toggle'); if(tg) tg.textContent='보기'; setStatus('api-status','저장된 키를 지웠습니다. 샘플 8건으로 동작합니다.','ok'); }); }
   if(apiFetch){ apiFetch.addEventListener('click', function(){
     var key=$('api-key')?$('api-key').value.trim():'';
     var kw=$('api-kw')?$('api-kw').value.trim():'전기';
     var rows=$('api-rows')?Math.min(100,Math.max(1,parseInt($('api-rows').value||'20',10))):20;
     if(!key){ setStatus('api-status','서비스키를 먼저 입력하세요. 키가 없으면 샘플 8건이 그대로 보입니다.','err'); return; }
-    try{ localStorage.setItem(KEY,key); }catch(e){}
+    if(!isNoSave()){ try{ localStorage.setItem(KEY,key); }catch(e){} } else { try{ localStorage.removeItem(KEY); }catch(e){} }
     setStatus('api-status','불러오는 중…');
     apiFetch.disabled=true;
     function ymdhm(d, endOfDay){ var p=function(x){return String(x).padStart(2,'0');}; return ''+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+(endOfDay?'2359':'0000'); }
@@ -1168,8 +1174,6 @@
 <script>
 (function(){ function guard(){ var h=location.hash; if(!h) return; var ok=['#problem','#features','#pricing','#demo','#services','#apply']; if(ok.indexOf(h)===-1){ history.replaceState(null,'',location.pathname); window.scrollTo(0,0); } } window.addEventListener('hashchange', guard); guard(); })();
 </script>
-
-<!--ethos-badge--><div style="text-align:center;padding:16px 8px 20px;font:12px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;color:#9aa1a9">이 페이지는 <a href="https://ethos.ai.kr" target="_blank" rel="noopener" style="color:#8a919b;text-decoration:underline">에토스AI 코드</a>로 만들어졌습니다</div>
-<script src="ai-doc.js"></script>
+<!-- picom key-mask r2 -->
 </body>
 </html>
