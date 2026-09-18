@@ -13,7 +13,7 @@
      (브라우저 코드에 OpenAI 키를 직접 넣지 마세요. 키는 백엔드에만.)
    ========================================================================= */
 (function () {
-  var AI_ENDPOINT = ""; // 예: "https://picom-xxxx.vercel.app/api/generate"
+  var AI_ENDPOINT = "https://picom-ai-openapi.vercel.app/api/generate"; // 예: "https://picom-xxxx.vercel.app/api/generate"
 
   var MAMMOTH_URL = "https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"; // .docx 읽기
   var DOCX_URL = "https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js";           // .docx 쓰기
