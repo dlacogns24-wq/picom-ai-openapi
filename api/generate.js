@@ -25,7 +25,7 @@
      (예: 'gemini-2.5-flash' → 'gemini-3.8-flash')
    ========================================================================= */
 
-const MODEL = 'gemini-2.5-flash'; // 무료. 만약 404가 나면 'gemini-3.8-flash' 로 교체하세요.
+const MODEL = 'gemini-3.6-flash'; // 무료. 만약 404가 나면 'gemini-3.8-flash' 로 교체하세요.
 const MAX_SECTIONS = 8;           // 무료 등급 분당 제한 보호 (항목 상한). 초과분은 잘림.
 
 async function callGemini(system, user, maxTokens) {
